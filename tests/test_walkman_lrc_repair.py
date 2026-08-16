@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from download_music import merge_bilingual_lyrics, safe_filename, select_lyrics
+from search_music import format_duration, format_track
 from walkman_lrc_repair import iter_lrc_files, transform
 
 
@@ -42,6 +44,36 @@ class WalkmanLrcRepairTests(unittest.TestCase):
 
             self.assertEqual(files, [root / "keep.lrc"])
             self.assertEqual(errors, [])
+
+    def test_download_helpers_keep_safe_names_and_bilingual_timestamps(self):
+        self.assertEqual(safe_filename("歌名:现场/特别版"), "歌名_现场_特别版")
+        original = "[00:01.00]こんにちは\n[00:02.00]さようなら\n"
+        translated = "[00:01.00]你好\n[00:02.00]再见\n"
+        self.assertEqual(
+            merge_bilingual_lyrics(original, translated),
+            "[00:01.00]こんにちは\n[00:01.00]你好\n"
+            "[00:02.00]さようなら\n[00:02.00]再见\n",
+        )
+        self.assertEqual(
+            select_lyrics({"lrc": original, "tlyric": translated}, "translated"),
+            translated,
+        )
+
+    def test_search_helpers_format_track_results(self):
+        result = format_track(
+            1,
+            {
+                "id": 123,
+                "name": "测试歌曲",
+                "artists": [{"name": "测试歌手"}],
+                "album": {"name": "测试专辑"},
+                "duration": 185000,
+            },
+        )
+        self.assertEqual(result["id"], "123")
+        self.assertEqual(result["artists"], ["测试歌手"])
+        self.assertEqual(result["durationFormatted"], "3:05")
+        self.assertEqual(format_duration(None), "0:00")
 
 
 if __name__ == "__main__":
