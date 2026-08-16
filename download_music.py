@@ -19,6 +19,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, Iterable
 
+from lrc_translate import TranslationError, translate_lrc
 from walkman_lrc_repair import transform, write_atomic
 
 
@@ -35,6 +36,17 @@ def safe_filename(name: str) -> str:
     cleaned = INVALID_FILENAME_RE.sub("_", name)
     cleaned = re.sub(r"\s+", " ", cleaned).strip().rstrip(".")
     return cleaned[:180] or "untitled"
+
+
+def ensure_biwin_mounted(path: Path) -> None:
+    """Refuse writes below /Volumes/Biwin when the card is not mounted."""
+    volume = Path("/Volumes/Biwin")
+    try:
+        path.resolve().relative_to(volume)
+    except ValueError:
+        return
+    if not volume.is_mount():
+        raise OSError("/Volumes/Biwin is not mounted; refusing to write to a local fallback directory")
 
 
 def read_track_ids(inline_ids: Iterable[str], input_path: Path | None) -> list[str]:
@@ -181,7 +193,22 @@ def download_audio(
         temporary.unlink(missing_ok=True)
 
 
-def write_walkman_lyrics(path: Path, text: str) -> str:
+def write_walkman_lyrics(
+    path: Path,
+    text: str,
+    *,
+    translate_japanese: bool = False,
+    translation_model: str = "deepseek-v4-flash",
+    translation_base_url: str | None = None,
+    translation_timeout: int = 120,
+) -> str:
+    if translate_japanese:
+        text = translate_lrc(
+            text,
+            model=translation_model,
+            base_url=translation_base_url,
+            timeout=translation_timeout,
+        )
     repaired, result = transform(text.encode("utf-8"), path)
     if repaired is None:
         return result.error
@@ -229,7 +256,14 @@ def download_one(
         print("  没有可用歌词")
         return "audio-only"
 
-    error = write_walkman_lyrics(lyric_path, lyric_text)
+    error = write_walkman_lyrics(
+        lyric_path,
+        lyric_text,
+        translate_japanese=args.translate_japanese,
+        translation_model=args.translation_model,
+        translation_base_url=getattr(args, "translation_base_url", None),
+        translation_timeout=args.translation_timeout,
+    )
     if error:
         print(f"  歌词跳过: {error}")
         return "audio-only"
@@ -256,6 +290,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--flat", action="store_true", help="Do not create an artist subfolder")
     parser.add_argument("--overwrite", action="store_true", help="Replace existing audio and LRC files")
     parser.add_argument("--dry-run", action="store_true", help="Show planned paths without downloading")
+    parser.add_argument(
+        "--translate-japanese",
+        action="store_true",
+        help="Translate Japanese lyric lines with GPT when NetEase has no suitable translation",
+    )
+    parser.add_argument("--translation-model", default="deepseek-v4-flash")
+    parser.add_argument("--translation-base-url", default=None, help="OpenAI 兼容 API 端点（默认读 OPENAI_BASE_URL 环境变量）")
+    parser.add_argument("--translation-timeout", type=int, default=120)
     parser.add_argument("--timeout", type=int, default=120, help="Per-command timeout in seconds")
     return parser
 
@@ -268,11 +310,12 @@ def main() -> int:
     try:
         track_ids = read_track_ids(args.ids, args.input)
         args.output_dir = args.output_dir.expanduser().resolve()
+        ensure_biwin_mounted(args.output_dir)
         counts: dict[str, int] = defaultdict(int)
         for track_id in track_ids:
             try:
                 counts[download_one(track_id, args)] += 1
-            except (NeteaseCliError, OSError, subprocess.TimeoutExpired) as exc:
+            except (NeteaseCliError, TranslationError, OSError, subprocess.TimeoutExpired) as exc:
                 counts["failed"] += 1
                 print(f"{track_id}: 失败 — {exc}", file=sys.stderr)
         print(

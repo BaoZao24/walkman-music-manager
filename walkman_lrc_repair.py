@@ -189,6 +189,76 @@ def write_atomic(path: Path, data: bytes) -> None:
             temporary.unlink()
 
 
+def run_repair(root: Path, apply: bool, backup_root: Path | None = None) -> int:
+    """Repair LRC files under root. Returns 0 on success, 1 on errors."""
+    if not root.is_dir():
+        raise FileNotFoundError(f"root is not a directory: {root}")
+
+    if apply and backup_root is None:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_root = root / f".walkman-lrc-backup-{stamp}"
+    if apply and backup_root is not None:
+        backup_root.mkdir(parents=True, exist_ok=False)
+
+    walk_errors: list[str] = []
+    results: list[FileResult] = []
+    changed = 0
+    skipped = 0
+    errors = 0
+
+    for path in iter_lrc_files(root, walk_errors):
+        try:
+            original = path.read_bytes()
+            repaired, result = transform(original, path)
+            if result.action == "would-repair" and repaired is not None:
+                if apply:
+                    assert backup_root is not None
+                    relative = path.relative_to(root)
+                    backup_path = backup_root / relative
+                    backup_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, backup_path)
+                    write_atomic(path, repaired)
+                    result.action = "repaired"
+                changed += 1
+            elif result.action == "skipped":
+                skipped += 1
+            results.append(result)
+        except (OSError, ValueError, UnicodeError) as exc:
+            errors += 1
+            results.append(FileResult(path=str(path), action="error", error=str(exc)))
+
+    if apply and backup_root is not None:
+        manifest = {
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "root": str(root),
+            "backup_root": str(backup_root),
+            "files": [
+                asdict(result) for result in results if result.action == "repaired"
+            ],
+        }
+        (backup_root / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    action_word = "repaired" if apply else "would repair"
+    print(f"LRC files scanned: {len(results)}")
+    print(f"Files {action_word}: {changed}")
+    print(f"Files skipped: {skipped}")
+    print(f"Read/write errors: {errors}")
+    print(f"Directory-walk errors: {len(walk_errors)}")
+    if apply and backup_root is not None:
+        print(f"Originals backed up to: {backup_root}")
+
+    for result in results:
+        if result.action in {"skipped", "error"}:
+            print(f"{result.action.upper()}: {result.path} — {result.error}")
+    for error in walk_errors:
+        print(f"WALK ERROR: {error}")
+
+    return 1 if errors or walk_errors else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -205,75 +275,7 @@ def main() -> int:
         help="Optional backup directory. Defaults to a timestamped hidden folder under root.",
     )
     args = parser.parse_args()
-
-    root = args.root.resolve()
-    if not root.is_dir():
-        parser.error(f"root is not a directory: {root}")
-
-    backup_root = args.backup_root
-    if args.apply and backup_root is None:
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup_root = root / f".walkman-lrc-backup-{stamp}"
-    if args.apply and backup_root is not None:
-        backup_root.mkdir(parents=True, exist_ok=False)
-
-    walk_errors: list[str] = []
-    results: list[FileResult] = []
-    changed = 0
-    skipped = 0
-    errors = 0
-
-    for path in iter_lrc_files(root, walk_errors):
-        try:
-            original = path.read_bytes()
-            repaired, result = transform(original, path)
-            if result.action == "would-repair" and repaired is not None:
-                if args.apply:
-                    assert backup_root is not None
-                    relative = path.relative_to(root)
-                    backup_path = backup_root / relative
-                    backup_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, backup_path)
-                    write_atomic(path, repaired)
-                    result.action = "repaired"
-                changed += 1
-            elif result.action == "skipped":
-                skipped += 1
-            results.append(result)
-        except (OSError, ValueError, UnicodeError) as exc:
-            errors += 1
-            results.append(FileResult(path=str(path), action="error", error=str(exc)))
-
-    if args.apply and backup_root is not None:
-        manifest = {
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-            "root": str(root),
-            "backup_root": str(backup_root),
-            "files": [
-                asdict(result) for result in results if result.action == "repaired"
-            ],
-        }
-        (backup_root / "manifest.json").write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-
-    action_word = "repaired" if args.apply else "would repair"
-    print(f"LRC files scanned: {len(results)}")
-    print(f"Files {action_word}: {changed}")
-    print(f"Files skipped: {skipped}")
-    print(f"Read/write errors: {errors}")
-    print(f"Directory-walk errors: {len(walk_errors)}")
-    if args.apply and backup_root is not None:
-        print(f"Originals backed up to: {backup_root}")
-
-    for result in results:
-        if result.action in {"skipped", "error"}:
-            print(f"{result.action.upper()}: {result.path} — {result.error}")
-    for error in walk_errors:
-        print(f"WALK ERROR: {error}")
-
-    return 1 if errors or walk_errors else 0
+    return run_repair(args.root.resolve(), args.apply, args.backup_root)
 
 
 if __name__ == "__main__":

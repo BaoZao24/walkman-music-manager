@@ -99,6 +99,34 @@ python3 download_music.py 185868 \
   --dry-run
 ```
 
+网易云直接提供的是 MP3/FLAC 时，不需要 `ncmdump`。若使用其他来源得到的是 `.ncm` 文件，使用下面的后处理入口；它只会对真实 `.ncm` 调用 `ncmdump`，并按输入目录的艺术家文件夹整理结果：
+
+```bash
+python3 process_music.py /path/to/ncm-library \
+  --output-dir /Volumes/Biwin/Music \
+  --ncmdump /opt/homebrew/bin/ncmdump
+```
+
+源目录可以包含同名 `.lrc` 文件。若需要用 GPT 翻译含日语假名的歌词，先在当前终端设置密钥，再显式加上翻译选项：
+
+```bash
+export OPENAI_API_KEY='在本机环境中设置，不要粘贴到对话或提交到 Git'
+python3 process_music.py /path/to/ncm-library \
+  --output-dir /Volumes/Biwin/Music \
+  --translate-japanese
+```
+
+直接下载路径也支持同一个选项：
+
+```bash
+python3 download_music.py 歌曲ID \
+  --output-dir /Volumes/Biwin/Music \
+  --lyrics original \
+  --translate-japanese
+```
+
+翻译模块只发送含日文假名的带时间戳歌词行，时间戳、元数据、英文和其它行在本地保留；GPT 返回行数不一致或不是 JSON 数组时，流程会报错而不写入歌词。歌词文件和音频文件不会由本项目提交到 Git。
+
 下载音乐涉及版权和服务条款，请只下载你有权保存或离线使用的内容；脚本不绕过 DRM、VIP 限制或其他访问控制。
 
 ### 第一阶段：搜索并下载
@@ -123,4 +151,31 @@ python3 download_music.py 1352857358 \
   --lyrics translated
 ```
 
-多个 ID 可以一次下载，也可以放入清单文件。搜索和下载分开，能避免同名歌曲被自动选错；后续完整工作流会在这里继续接入格式转换、歌词处理和移动到存储卡。
+多个 ID 可以一次下载，也可以放入清单文件。搜索和下载分开，能避免同名歌曲被自动选错；下载器会直接把音频和修复后的 LRC 写入 `/Volumes/Biwin/Music/歌手/`。
+
+## 从哔哩哔哩下载音频（翻唱整理）
+
+`walkman bilibili` 提供与旧 BILIBILIdownload 项目等价的功能，整合了 WBI 签名 API、yt-dlp 批量下载、BV 号清理与译名重命名、复制到最终目录。所有子命令默认只读，`--dry-run` 只预览；下载、重命名默认即落地（与旧脚本一致），请先预览再执行。
+
+准备：安装 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，并准备 bilibili 浏览器导出的 Netscape 格式 cookie（默认文件 `www.bilibili.com_cookies.txt`，不要提交到 Git）。
+
+```bash
+# 列出 UP 主全部视频（WBI 签名 API）
+python3 walkman.py bilibili list 488970166 --output kaf_all_videos.json
+
+# 批量获取 BV 号标题/时长
+python3 walkman.py bilibili fetch BV1hD421p7Vy BV17tyHYgELa --output titles.json
+
+# 批量下载 mp3（已有同 BV 文件自动跳过）
+python3 walkman.py bilibili download --input kaf_flat.txt \
+  --output-dir KAF_Covers --no-proxy
+
+# 重命名：去掉 [BV] 后缀；配合 JSON 译名表应用中文译名
+python3 walkman.py bilibili rename KAF_Covers --translations trans.json --dry-run
+python3 walkman.py bilibili rename KAF_Covers --translations trans.json
+
+# 复制到最终音乐目录（同名跳过）
+python3 walkman.py bilibili copy KAF_Covers "/Volumes/Biwin/Music/花谱"
+```
+
+译名表是 `{BV号: 新文件名}` 的 JSON。不提供译名表时仅去掉 `[BV]` 后缀；重名文件自动加 `(2)` 序号。下载只处理你有权保存的内容，不绕过 bilibili 的访问控制。

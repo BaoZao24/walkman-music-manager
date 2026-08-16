@@ -6,3 +6,7 @@ venv/
 dist/
 build/
 *.egg-info/
+# 敏感文件：bilibili 登录 cookie、API 密钥
+*cookies*.txt
+cookies.txt
+*.env
