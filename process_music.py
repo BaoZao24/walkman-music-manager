@@ -92,7 +92,7 @@ def process_one(track: Path, args: argparse.Namespace) -> str:
         if target_audio.exists() and not args.overwrite:
             print(f"音频已存在，跳过: {target_audio}")
         else:
-            converted.replace(target_audio)
+            shutil.move(str(converted), str(target_audio))
             converted = None
             print(f"已转换: {target_audio}")
 
