@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, Iterable
@@ -216,6 +217,54 @@ def write_walkman_lyrics(
     return ""
 
 
+def embed_album_cover(audio: Path, cover_url: str, timeout: int = 30) -> None:
+    """Download an album cover and embed it into the audio (FLAC picture / MP3 APIC).
+
+    Uses ffmpeg; raises OSError if ffmpeg is missing or embedding fails.
+    """
+    if shutil.which("ffmpeg") is None:
+        raise OSError("ffmpeg 不可用，无法嵌入封面")
+    with tempfile.NamedTemporaryFile(prefix=".cover-", suffix=".jpg", dir=audio.parent, delete=False) as handle:
+        cover = Path(handle.name)
+    try:
+        try:
+            request = urllib.request.Request(
+                cover_url, headers={"User-Agent": "Mozilla/5.0"}
+            )
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                cover.write_bytes(response.read())
+        except OSError as exc:
+            raise OSError(f"封面下载失败: {exc}") from exc
+        if cover.stat().st_size < 1000:
+            raise OSError("封面数据过小，疑似无效")
+        temp_output = audio.parent / f".{audio.stem}.cover-tmp{audio.suffix}"
+        process = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", str(audio), "-i", str(cover),
+                "-map", "0:a", "-map", "1:v",
+                "-c", "copy", "-c:v", "mjpeg",
+                "-disposition:v", "attached_pic",
+                "-metadata:s:v", "title=Album cover",
+                str(temp_output),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if process.returncode != 0 or not temp_output.is_file():
+            raise OSError(process.stderr.strip()[-300:] or "ffmpeg 内嵌封面失败")
+        temp_output.replace(audio)
+    finally:
+        cover.unlink(missing_ok=True)
+
+
+def detail_cover_url(detail: dict[str, Any]) -> str:
+    album = detail.get("album") or {}
+    url = album.get("picUrl") or album.get("pic") or ""
+    return str(url) if isinstance(url, str) else ""
+
+
 def download_one(
     track_id: str,
     args: argparse.Namespace,
@@ -245,6 +294,15 @@ def download_one(
             args.timeout,
         )
         print(f"  已下载: {audio_path}")
+
+    if not getattr(args, "no_cover", False):
+        cover_url = detail_cover_url(detail)
+        if cover_url:
+            try:
+                embed_album_cover(audio_path, cover_url)
+                print(f"  已嵌入封面: {audio_path}")
+            except OSError as exc:
+                print(f"  封面嵌入跳过: {exc}")
 
     if lyric_path.exists() and not args.overwrite:
         print(f"  歌词已存在，跳过: {lyric_path}")
@@ -290,6 +348,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--flat", action="store_true", help="Do not create an artist subfolder")
     parser.add_argument("--overwrite", action="store_true", help="Replace existing audio and LRC files")
     parser.add_argument("--dry-run", action="store_true", help="Show planned paths without downloading")
+    parser.add_argument("--no-cover", action="store_true", help="不嵌入专辑封面")
     parser.add_argument(
         "--translate-japanese",
         action="store_true",

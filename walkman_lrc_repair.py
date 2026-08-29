@@ -80,6 +80,20 @@ def is_netease_json_metadata(line: str) -> bool:
     return isinstance(obj, dict) and "t" in obj and "c" in obj
 
 
+TIMED_METADATA_RE = re.compile(
+    r"^(?P<tags>(?:\[\d+:\d+(?:[.:]\d+)?\])+)\s*"
+    r"(?P<text>(?:作詞|作词|作曲|編曲|编曲|歌詞|歌词|翻訳|翻译|唄|歌|"
+    r"タイトル|调教|制作|混音|Mastering|lyrics|lyricist|composer|"
+    r"arranged|produced|producer|album|artist|title|"
+    r"[\-–—:：\s]*$))",
+    re.I,
+)
+
+
+def is_timed_metadata(line: str) -> bool:
+    return bool(TIMED_METADATA_RE.match(line))
+
+
 def normalize_timestamp(match: re.Match[str]) -> str:
     minute = int(match.group("minute"))
     second = int(match.group("second"))
@@ -126,6 +140,9 @@ def transform(data: bytes, path: Path) -> tuple[bytes | None, FileResult]:
     for raw_line in source.splitlines():
         if is_netease_json_metadata(raw_line):
             result.json_lines_removed += 1
+            continue
+        if is_timed_metadata(raw_line):
+            result.metadata_lines_removed += 1
             continue
 
         normalized, timestamp_changed = normalize_line(raw_line)

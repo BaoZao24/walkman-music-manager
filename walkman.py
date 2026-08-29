@@ -233,6 +233,7 @@ def cmd_full(args: argparse.Namespace) -> int:
         ids=ids, input=None, output_dir=args.output_dir,
         quality=args.quality, lyrics=args.lyrics, profile=args.profile, cli=args.cli,
         flat=False, overwrite=False, dry_run=args.dry_run,
+        no_cover=args.no_cover,
         translate_japanese=args.translate_japanese,
         translation_model=args.translation_model,
         translation_base_url=args.translation_base_url,
@@ -278,6 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_download.add_argument("--flat", action="store_true")
     p_download.add_argument("--overwrite", action="store_true")
     p_download.add_argument("--dry-run", action="store_true")
+    p_download.add_argument("--no-cover", action="store_true", help="不嵌入专辑封面")
     p_download.add_argument("--translate-japanese", action="store_true")
     p_download.add_argument("--translation-model", default="deepseek-v4-flash")
     p_download.add_argument("--translation-base-url", default=None, help="OpenAI 兼容 API 端点（默认读 OPENAI_BASE_URL 环境变量）")
@@ -292,6 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_convert.add_argument("--flat", action="store_true")
     p_convert.add_argument("--overwrite", action="store_true")
     p_convert.add_argument("--dry-run", action="store_true")
+    p_convert.add_argument("--no-cover", action="store_true", help="不嵌入专辑封面")
     p_convert.add_argument("--translate-japanese", action="store_true")
     p_convert.add_argument("--translation-model", default="deepseek-v4-flash")
     p_convert.add_argument("--translation-base-url", default=None, help="OpenAI 兼容 API 端点（默认读 OPENAI_BASE_URL 环境变量）")
@@ -326,6 +329,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_full.add_argument("--profile")
     p_full.add_argument("--cli", default="neteasecli")
     p_full.add_argument("--dry-run", action="store_true")
+    p_full.add_argument("--no-cover", action="store_true", help="不嵌入专辑封面")
     p_full.add_argument("--translate-japanese", action="store_true")
     p_full.add_argument("--translation-model", default="deepseek-v4-flash")
     p_full.add_argument("--translation-base-url", default=None, help="OpenAI 兼容 API 端点（默认读 OPENAI_BASE_URL 环境变量）")
