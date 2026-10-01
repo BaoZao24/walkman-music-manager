@@ -233,6 +233,7 @@ def cmd_full(args: argparse.Namespace) -> int:
         ids=ids, input=None, output_dir=args.output_dir,
         quality=args.quality, lyrics=args.lyrics, profile=args.profile, cli=args.cli,
         flat=False, overwrite=False, dry_run=args.dry_run,
+        by_album=args.by_album,
         no_cover=args.no_cover,
         translate_japanese=args.translate_japanese,
         translation_model=args.translation_model,
@@ -277,6 +278,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_download.add_argument("--profile")
     p_download.add_argument("--cli", default="neteasecli")
     p_download.add_argument("--flat", action="store_true")
+    p_download.add_argument("--by-album", action="store_true", help="按专辑名建子目录（同一专辑放一起）")
     p_download.add_argument("--overwrite", action="store_true")
     p_download.add_argument("--dry-run", action="store_true")
     p_download.add_argument("--no-cover", action="store_true", help="不嵌入专辑封面")
@@ -324,6 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_full.add_argument("--output-dir", type=Path, required=True)
     p_full.add_argument("--album-name", required=True)
     p_full.add_argument("--limit", type=int, default=1, help="下载前 N 个搜索结果")
+    p_full.add_argument("--by-album", action="store_true", help="按专辑名建子目录（同一专辑放一起）")
     p_full.add_argument("--quality", choices=["standard", "higher", "exhigh", "lossless", "hires"], default="exhigh")
     p_full.add_argument("--lyrics", choices=["original", "translated", "bilingual"], default="translated")
     p_full.add_argument("--profile")

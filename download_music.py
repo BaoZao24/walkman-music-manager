@@ -271,7 +271,11 @@ def download_one(
 ) -> str:
     detail = run_cli(args.cli, args.profile, ["track", "detail", track_id], args.timeout)
     stem = track_stem(detail)
-    artist_dir = args.output_dir if args.flat else args.output_dir / safe_filename(artist_label(detail))
+    if getattr(args, "by_album", False):
+        album = ((detail.get("album") or {}).get("name")) or artist_label(detail)
+        artist_dir = args.output_dir / safe_filename(album)
+    else:
+        artist_dir = args.output_dir if args.flat else args.output_dir / safe_filename(artist_label(detail))
     extension = fetch_extension(args.cli, args.profile, track_id, args.quality, args.timeout)
     audio_path = artist_dir / f"{stem}{extension}"
     lyric_path = artist_dir / f"{stem}.lrc"
@@ -346,6 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile", help="neteasecli profile name")
     parser.add_argument("--cli", default="neteasecli", help="neteasecli executable or path")
     parser.add_argument("--flat", action="store_true", help="Do not create an artist subfolder")
+    parser.add_argument("--by-album", action="store_true", help="按专辑名建子目录（同一专辑放一起）")
     parser.add_argument("--overwrite", action="store_true", help="Replace existing audio and LRC files")
     parser.add_argument("--dry-run", action="store_true", help="Show planned paths without downloading")
     parser.add_argument("--no-cover", action="store_true", help="不嵌入专辑封面")

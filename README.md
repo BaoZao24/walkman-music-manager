@@ -1,6 +1,32 @@
 # Walkman Music Manager
 
-一个用于修复 LRC 歌词文件、提高 Sony Walkman 兼容性的独立脚本。
+Walkman 音乐管理工具：网易云/bilibili 下载 → ncm 转换 → 歌词修复 → 封面嵌入 → 按日期归档。
+
+## 完整工作流
+
+```bash
+cd "/Users/shushu/Documents/Codex/2026-08-13/volumes-biwin-music/walkman-lrc-repair"
+
+# 1. 下载（自动嵌入专辑封面 + 修复歌词）
+python3 walkman.py download <歌曲ID> --output-dir /Volumes/Biwin/Music --by-album
+
+# 2. 转换 .ncm（自动嵌入封面 + 修复歌词）
+python3 walkman.py convert ~/Music/网易云音乐 --output-dir "/Volumes/Biwin/Music/按日期/$(date +%Y-%m-%d)" --flat
+
+# 3. 复制已下载的 mp3 到日期目录
+cp ~/Music/网易云音乐/*.mp3 "/Volumes/Biwin/Music/按日期/$(date +%Y-%m-%d)/"
+
+# 4. 修复歌词（Walkman 兼容格式）
+python3 walkman.py repair "/Volumes/Biwin/Music/按日期/$(date +%Y-%m-%d)" --apply
+
+# 5. 清理源目录
+rm -f ~/Music/网易云音乐/*
+```
+
+## 工具脚本（tools/）
+
+- `embed_cover.py` — 为缺封面的音频批量嵌入专辑封面（网易云 API 搜索 → ffmpeg 内嵌）
+- `fill_lyrics.py` — 为缺 lrc 的音频批量补歌词（网易云搜索 → 修复 → 写入）
 
 ## 能处理的问题
 
