@@ -1,4 +1,4 @@
-# Walkman LRC Repair
+# Walkman Music Manager
 
 一个用于修复 LRC 歌词文件、提高 Sony Walkman 兼容性的独立脚本。
 
