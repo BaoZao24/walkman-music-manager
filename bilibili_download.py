@@ -247,6 +247,7 @@ def cmd_bili_download(args: argparse.Namespace) -> int:
             ytdlp,
             "--no-playlist",
             "-x", "--audio-format", "mp3", "--audio-quality", "0",
+            "--embed-thumbnail",
             "--retries", "5", "--fragment-retries", "5",
             "--newline", "--no-warnings",
             "-o", str(outdir / "%(title)s [%(id)s].%(ext)s"),
@@ -371,7 +372,11 @@ def cmd_bili_copy(args: argparse.Namespace) -> int:
             print(f"将复制: {path.name}")
             copied += 1
             continue
-        shutil.copy2(path, dest / path.name)
+        try:
+            shutil.copy2(path, dest / path.name)
+        except OSError:
+            # exFAT（Walkman 卡）不支持 copy2 复制 chflags/xattr，降级为纯数据复制
+            shutil.copyfile(path, dest / path.name)
         copied += 1
     print(f"复制 {copied} 个, 跳过同名 {skipped} 个 (dry_run={args.dry_run})")
     return 0

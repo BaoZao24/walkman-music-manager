@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest.mock import patch
 
 from bilibili_download import (
     VIDEO_URL_RE,
@@ -104,6 +105,19 @@ class BilibiliCopyTests(unittest.TestCase):
             code = cmd_bili_copy(make_args(source=src, dest=dst, dry_run=True))
             self.assertEqual(code, 0)
             self.assertFalse((dst / "a.mp3").exists())
+
+    def test_copy_falls_back_when_copy2_fails_on_exfat(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            src, dst = root / "src", root / "dst"
+            src.mkdir(); dst.mkdir()
+            (src / "a.mp3").write_bytes(b"a")
+            (src / "b.mp3").write_bytes(b"b")
+            with patch("bilibili_download.shutil.copy2", side_effect=OSError(22, "Invalid argument")):
+                code = cmd_bili_copy(make_args(source=src, dest=dst))
+            self.assertEqual(code, 0)
+            self.assertEqual((dst / "a.mp3").read_bytes(), b"a")
+            self.assertEqual((dst / "b.mp3").read_bytes(), b"b")
 
 
 if __name__ == "__main__":
