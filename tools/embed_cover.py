@@ -19,7 +19,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-NETEASECLI_DIR = Path("/Users/shushu/Documents/Codex/2026-08-13/volumes-biwin-music/work/neteasecli")
+NETEASECLI_DIR = Path("/opt/homebrew/lib/node_modules/neteasecli")
 AUDIO_EXT = {".flac", ".mp3", ".m4a"}
 
 
@@ -55,6 +55,7 @@ def search_cover(song: str) -> str | None:
 def has_cover(audio: Path) -> bool:
     r = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v",
+         "-show_entries", "stream=codec_type",
          "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],
         capture_output=True, text=True,
     )

@@ -19,7 +19,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-NETEASECLI_DIR = Path("/Users/shushu/Documents/Codex/2026-08-13/volumes-biwin-music/work/neteasecli")
+NETEASECLI_DIR = Path("/opt/homebrew/lib/node_modules/neteasecli")
 WR = Path(__file__).resolve().parent.parent
 AUDIO_EXT = {".flac", ".mp3", ".m4a"}
 
