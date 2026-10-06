@@ -1,8 +1,8 @@
 # Walkman Music Manager
 
-面向 Sony Walkman（可移动存储卡）的音乐整理工作流：从网易云音乐 / 哔哩哔哩下载音频，转换 `.ncm`，修复成 Walkman 兼容的 LRC 歌词，嵌入专辑/视频封面，并按日期、歌手或专辑归档到音乐库。
+一套面向 Sony Walkman（可移动存储卡）的音乐自动下载与整理工作流：支持从**网易云音乐**和**哔哩哔哩**自动下载歌曲与翻唱，自动完成**歌词处理**（修复为 Walkman 兼容的 LRC、可选日语翻译）和**封面嵌入**（网易云专辑封面 / B 站视频封面），并按日期、歌手或专辑归档到音乐库。
 
-**Music library workflow for Sony Walkman storage cards**: download from NetEase Cloud Music / Bilibili, convert `.ncm`, repair LRC lyrics for Walkman, embed covers, and archive your library.
+**An automated music download & library workflow for Sony Walkman storage cards**: fetch tracks and covers from NetEase Cloud Music and Bilibili, repair lyrics into Walkman-compatible LRC, embed album / video covers, and archive your library by date, artist, or album.
 
 所有写入类操作默认提供预览（`--dry-run`）与备份，避免误操作。
 
