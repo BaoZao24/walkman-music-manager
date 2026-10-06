@@ -106,7 +106,7 @@ def main() -> int:
     print("\n下载时使用上面的 ID，例如：")
     print(
         "python3 download_music.py "
-        f"{tracks[0]['id']} --output-dir /Volumes/Biwin/Music"
+        f"{tracks[0]['id']} --output-dir /Volumes/WALKMAN/Music"
     )
     return 0
 

@@ -27,7 +27,7 @@ from bilibili_download import build_parser as build_bilibili_parser
 from download_music import (
     NeteaseCliError,
     download_one,
-    ensure_biwin_mounted,
+    ensure_volume_mounted,
     read_track_ids,
     run_cli,
 )
@@ -85,7 +85,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     try:
         track_ids = read_track_ids(args.ids, args.input)
         args.output_dir = args.output_dir.expanduser().resolve()
-        ensure_biwin_mounted(args.output_dir)
+        ensure_volume_mounted(args.output_dir)
         counts: dict[str, int] = defaultdict(int)
         for track_id in track_ids:
             try:
@@ -105,7 +105,7 @@ def cmd_convert(args: argparse.Namespace) -> int:
     args.source_root = args.source if args.source.is_dir() else args.source.parent
     args.output_dir = args.output_dir.expanduser().resolve()
     try:
-        ensure_biwin_mounted(args.output_dir)
+        ensure_volume_mounted(args.output_dir)
     except OSError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -157,7 +157,7 @@ def cmd_album(args: argparse.Namespace) -> int:
     output_dir = args.output_dir.expanduser().resolve()
     album_dir = output_dir / args.album_name
     try:
-        ensure_biwin_mounted(output_dir)
+        ensure_volume_mounted(output_dir)
     except OSError as exc:
         print(str(exc), file=sys.stderr)
         return 2

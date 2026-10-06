@@ -12,7 +12,7 @@ import tempfile
 from collections import defaultdict
 from pathlib import Path
 
-from download_music import ensure_biwin_mounted, safe_filename, write_walkman_lyrics
+from download_music import ensure_volume_mounted, safe_filename, write_walkman_lyrics
 from lrc_translate import TranslationError, translate_lrc
 
 
@@ -146,7 +146,7 @@ def main() -> int:
     args.source_root = args.source if args.source.is_dir() else args.source.parent
     args.output_dir = args.output_dir.expanduser().resolve()
     try:
-        ensure_biwin_mounted(args.output_dir)
+        ensure_volume_mounted(args.output_dir)
     except OSError as exc:
         print(str(exc), file=sys.stderr)
         return 2

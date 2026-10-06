@@ -279,7 +279,7 @@ def run_repair(root: Path, apply: bool, backup_root: Path | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "root", type=Path, help="Storage-card root, for example /Volumes/Biwin"
+        "root", type=Path, help="Storage-card root, for example /Volumes/WALKMAN"
     )
     parser.add_argument(
         "--apply",

@@ -1,34 +1,14 @@
 # Walkman Music Manager
 
-Walkman 音乐管理工具：网易云/bilibili 下载 → ncm 转换 → 歌词修复 → 封面嵌入 → 按日期归档。
+面向 Sony Walkman（可移动存储卡）的音乐整理工作流：从网易云音乐 / 哔哩哔哩下载音频，转换 `.ncm`，修复成 Walkman 兼容的 LRC 歌词，嵌入专辑/视频封面，并按日期、歌手或专辑归档到音乐库。
 
-## 完整工作流
+**Music library workflow for Sony Walkman storage cards**: download from NetEase Cloud Music / Bilibili, convert `.ncm`, repair LRC lyrics for Walkman, embed covers, and archive your library.
 
-```bash
-cd "/Users/shushu/Documents/Codex/2026-08-13/volumes-biwin-music/walkman-lrc-repair"
+所有写入类操作默认提供预览（`--dry-run`）与备份，避免误操作。
 
-# 1. 下载（自动嵌入专辑封面 + 修复歌词）
-python3 walkman.py download <歌曲ID> --output-dir /Volumes/Biwin/Music --by-album
+## 功能特性
 
-# 2. 转换 .ncm（自动嵌入封面 + 修复歌词）
-python3 walkman.py convert ~/Music/网易云音乐 --output-dir "/Volumes/Biwin/Music/按日期/$(date +%Y-%m-%d)" --flat
-
-# 3. 复制已下载的 mp3 到日期目录
-cp ~/Music/网易云音乐/*.mp3 "/Volumes/Biwin/Music/按日期/$(date +%Y-%m-%d)/"
-
-# 4. 修复歌词（Walkman 兼容格式）
-python3 walkman.py repair "/Volumes/Biwin/Music/按日期/$(date +%Y-%m-%d)" --apply
-
-# 5. 清理源目录
-rm -f ~/Music/网易云音乐/*
-```
-
-## 工具脚本（tools/）
-
-- `embed_cover.py` — 为缺封面的音频批量嵌入专辑封面（网易云 API 搜索 → ffmpeg 内嵌）
-- `fill_lyrics.py` — 为缺 lrc 的音频批量补歌词（网易云搜索 → 修复 → 写入）
-
-## 能处理的问题
+### 歌词修复（`walkman_lrc_repair.py` / `walkman.py repair`）
 
 - 将 UTF-8 或 GB18030 文本统一转换为 UTF-8；
 - 删除网易云歌词文件中混入的 JSON 元数据；
@@ -38,49 +18,62 @@ rm -f ~/Music/网易云音乐/*
 - 采用原子替换，减少写入中断造成文件损坏的风险；
 - 默认跳过 macOS 产生的 `._*.lrc` AppleDouble sidecar 文件。
 
-## 使用方法
+### 网易云音乐下载（`download_music.py`、`search_music.py`）
 
-建议先做一次预览：
+- 集成 [neteasecli](https://github.com/wangwalk/neteasecli) 搜索与下载，支持歌曲 ID 清单批量下载；
+- 自动嵌入专辑封面（FLAC picture / MP3 APIC）；
+- 歌词三种模式：原文 / 网易云官方中文翻译 / 双语（无翻译时自动回退）；
+- 可选的 GPT 日语歌词翻译：只发送含日文假名的带时间戳歌词行，时间戳与其它行在本地保留，返回校验失败时不写入；
+- 默认按艺术家建子目录、已有文件自动跳过，`--dry-run` 可先预览。
 
-```bash
-python3 walkman_lrc_repair.py /Volumes/Biwin
+### `.ncm` 转换（`process_music.py`）
+
+- 批量调用 [ncmdump](https://github.com/taurusxin/ncmdump) 转换 `.ncm` 文件；
+- 仅对真实 `.ncm` 调用转换器，保留艺术家目录结构，输出时自动嵌入封面并修复歌词。
+
+### 哔哩哔哩翻唱整理（`walkman.py bilibili`）
+
+为整理翻唱投稿设计（示例场景：虚拟歌手 / 唱见的高频翻唱更新）：
+
+- `list`：WBI 签名 API 列出 UP 主全部投稿（含发布时间，便于筛选最新作品）；
+- `fetch`：批量获取 BV 号的标题 / 时长；
+- `download`：yt-dlp 批量下载 mp3（最高音质），**自动嵌入视频封面**，已有同 BV 文件自动跳过，失败清单单独输出；
+- `rename`：删除 `[BV]` 后缀，按 JSON 译名表应用中文译名，重名自动加序号；
+- `copy`：把整理好的音频复制到最终音乐目录（同名跳过）。
+
+### 封面与歌词补齐（`tools/`）
+
+- `tools/embed_cover.py`：为缺封面的音频按文件名搜索网易云封面并批量嵌入（ffprobe 检测 → 下载 → ffmpeg 内嵌）；
+- `tools/fill_lyrics.py`：为缺 LRC 的音频批量补歌词（搜索 → 修复 → 按同名写入）。
+
+### 统一 CLI（`walkman.py`）
+
+```
+walkman.py search    搜索网易云音乐
+walkman.py download  下载歌曲 + Walkman 歌词（自动嵌封面）
+walkman.py convert   批量转换 .ncm（自动嵌封面 + 修复歌词）
+walkman.py repair    修复存储卡上的 LRC
+walkman.py album     整理为单张专辑目录（只移动源目录顶层文件）
+walkman.py full      一键：搜索 → 下载 → 整理为专辑目录
+walkman.py bilibili  list / fetch / download / rename / copy
 ```
 
-确认扫描数量和待修复数量后，正式执行：
+其中 `album` 带安全防呆：递归移动整个目录树（`--recursive`，属于破坏性操作）必须显式加 `--confirm`。
 
-```bash
-python3 walkman_lrc_repair.py /Volumes/Biwin --apply
-```
+### 通用安全设计
 
-正式执行时，原文件会备份到类似下面的目录：
+- 所有子命令默认只读，`--dry-run` 只预览；下载 / 重命名 / 复制等落地命令与旧脚本行为一致；
+- 目标位于 `/Volumes/<卷名>` 且该卷未挂载时拒绝写入，防止 macOS 在系统盘上静默建目录导致文件写错位置；
+- 交互式登录（neteasecli / bilibili cookie）均在本机完成，本项目不读取或保存你的登录凭据；
+- 不绕过任何 DRM、VIP 限制或访问控制。
 
-```text
-/Volumes/Biwin/.walkman-lrc-backup-20260816-120000/
-```
+## 环境要求
 
-也可以手动指定备份目录：
-
-```bash
-python3 walkman_lrc_repair.py /Volumes/Biwin \
-  --apply \
-  --backup-root /Volumes/Biwin/.my-lrc-backup
-```
-
-脚本只处理带标准时间戳的 `.lrc` 文件；没有时间戳或无法解码的文件会跳过并报告，不会删除。
-
-## 测试
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-## 注意
-
-请先安全弹出并重新插入存储卡，再用 Walkman 测试歌词显示。备份目录不要删除，确认一切正常后再自行清理。
-
-## 自动下载音乐与歌词
-
-本项目可以调用 [neteasecli](https://github.com/wangwalk/neteasecli) 下载你有权使用的网易云音乐内容，并把歌词整理成 Walkman 可读的 LRC 文件。先安装并登录：
+- Python 3.10+（仅标准库，无第三方依赖）
+- [ffmpeg](https://ffmpeg.org/)（封面嵌入、音频转码）
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp)（哔哩哔哩下载）
+- [ncmdump](https://github.com/taurusxin/ncmdump)（`.ncm` 转换，可选）
+- [neteasecli](https://github.com/wangwalk/neteasecli)（网易云下载与封面/歌词搜索，可选）：
 
 ```bash
 npm install --global neteasecli
@@ -88,120 +81,132 @@ neteasecli auth login
 neteasecli auth check
 ```
 
-登录时，`neteasecli` 会从浏览器导入网易云登录状态；本项目不会读取或保存 Cookie。先用网易云搜索命令找到歌曲 ID：
+- （可选）OpenAI 兼容 API（日语歌词翻译），通过环境变量提供密钥。
+
+## 快速开始
+
+把 `/Volumes/WALKMAN` 替换为你的存储卡挂载路径：
 
 ```bash
-neteasecli --json search track "歌曲名"
+# 1. 下载（自动嵌入专辑封面 + 修复歌词）
+python3 walkman.py download <歌曲ID> --output-dir /Volumes/WALKMAN/Music --by-album
+
+# 2. 转换 .ncm（自动嵌入封面 + 修复歌词）
+python3 walkman.py convert ~/Music/网易云音乐 \
+  --output-dir "/Volumes/WALKMAN/Music/按日期/$(date +%Y-%m-%d)" --flat
+
+# 3. 复制已下载的 mp3 到日期目录
+cp ~/Music/网易云音乐/*.mp3 "/Volumes/WALKMAN/Music/按日期/$(date +%Y-%m-%d)/"
+
+# 4. 修复歌词（Walkman 兼容格式）
+python3 walkman.py repair "/Volumes/WALKMAN/Music/按日期/$(date +%Y-%m-%d)" --apply
+
+# 5. 清理源目录
+rm -f ~/Music/网易云音乐/*
 ```
 
-下载一首歌到存储卡的音乐目录：
+## 使用详解
+
+### 歌词修复
+
+建议先做一次预览，确认扫描数量和待修复数量：
 
 ```bash
-python3 download_music.py 185868 \
-  --output-dir /Volumes/Biwin/Music
+python3 walkman_lrc_repair.py /Volumes/WALKMAN
 ```
 
-也可以准备一个 ID 清单，每行一个歌曲 ID：
-
-```text
-# download-list.txt
-185868
-186016
-```
+正式执行（原文件会备份到带时间戳的隐藏目录）：
 
 ```bash
-python3 download_music.py \
-  --input download-list.txt \
-  --output-dir /Volumes/Biwin/Music \
+python3 walkman_lrc_repair.py /Volumes/WALKMAN --apply
+# 备份示例：/Volumes/WALKMAN/.walkman-lrc-backup-20260816-120000/
+
+# 也可以手动指定备份目录：
+python3 walkman_lrc_repair.py /Volumes/WALKMAN --apply --backup-root /Volumes/WALKMAN/.my-lrc-backup
+```
+
+脚本只处理带标准时间戳的 `.lrc` 文件；没有时间戳或无法解码的文件会跳过并报告，不会删除。
+
+### 网易云音乐搜索与下载
+
+先用搜索找到歌曲 ID：
+
+```bash
+python3 search_music.py "あいみょん マリーゴールド"
+python3 search_music.py "あいみょん マリーゴールド" --json   # 结构化输出，便于脚本处理
+```
+
+下载单曲或批量（每行一个 ID 的清单文件）：
+
+```bash
+python3 download_music.py 185868 --output-dir /Volumes/WALKMAN/Music
+python3 download_music.py --input download-list.txt \
+  --output-dir /Volumes/WALKMAN/Music \
   --quality exhigh \
   --lyrics translated
 ```
 
-默认会按艺术家建立子文件夹，已有文件会跳过；`--lyrics translated` 优先使用网易云提供的中文翻译，没有翻译时回退到原文。也可以使用 `--lyrics original` 或 `--lyrics bilingual`。正式下载前建议先预览：
+质量可选 `standard / higher / exhigh / lossless / hires`；歌词可选 `original / translated / bilingual`。正式下载前建议先 `--dry-run` 预览。
+
+需要 GPT 翻译日语歌词时：
 
 ```bash
-python3 download_music.py 185868 \
-  --output-dir /Volumes/Biwin/Music \
-  --dry-run
-```
-
-网易云直接提供的是 MP3/FLAC 时，不需要 `ncmdump`。若使用其他来源得到的是 `.ncm` 文件，使用下面的后处理入口；它只会对真实 `.ncm` 调用 `ncmdump`，并按输入目录的艺术家文件夹整理结果：
-
-```bash
-python3 process_music.py /path/to/ncm-library \
-  --output-dir /Volumes/Biwin/Music \
-  --ncmdump /opt/homebrew/bin/ncmdump
-```
-
-源目录可以包含同名 `.lrc` 文件。若需要用 GPT 翻译含日语假名的歌词，先在当前终端设置密钥，再显式加上翻译选项：
-
-```bash
-export OPENAI_API_KEY='在本机环境中设置，不要粘贴到对话或提交到 Git'
-python3 process_music.py /path/to/ncm-library \
-  --output-dir /Volumes/Biwin/Music \
-  --translate-japanese
-```
-
-直接下载路径也支持同一个选项：
-
-```bash
+export OPENAI_API_KEY='在本机环境中设置，不要提交到版本库'
 python3 download_music.py 歌曲ID \
-  --output-dir /Volumes/Biwin/Music \
+  --output-dir /Volumes/WALKMAN/Music \
   --lyrics original \
   --translate-japanese
 ```
 
-翻译模块只发送含日文假名的带时间戳歌词行，时间戳、元数据、英文和其它行在本地保留；GPT 返回行数不一致或不是 JSON 数组时，流程会报错而不写入歌词。歌词文件和音频文件不会由本项目提交到 Git。
+`process_music.py`（`.ncm` 转换）与 `walkman.py download / convert` 支持同样的 `--translate-japanese` 选项。
 
-下载音乐涉及版权和服务条款，请只下载你有权保存或离线使用的内容；脚本不绕过 DRM、VIP 限制或其他访问控制。
+### 哔哩哔哩翻唱整理
 
-### 第一阶段：搜索并下载
-
-按关键词搜索歌曲，结果中的 ID 可以直接交给下载脚本：
-
-```bash
-python3 search_music.py "あいみょん マリーゴールド"
-```
-
-如果要让其他脚本或 Codex 读取结果，可以输出结构化 JSON：
-
-```bash
-python3 search_music.py "あいみょん マリーゴールド" --json
-```
-
-确认歌曲 ID 后再下载：
-
-```bash
-python3 download_music.py 1352857358 \
-  --output-dir /Volumes/Biwin/Music \
-  --lyrics translated
-```
-
-多个 ID 可以一次下载，也可以放入清单文件。搜索和下载分开，能避免同名歌曲被自动选错；下载器会直接把音频和修复后的 LRC 写入 `/Volumes/Biwin/Music/歌手/`。
-
-## 从哔哩哔哩下载音频（翻唱整理）
-
-`walkman bilibili` 提供与旧 BILIBILIdownload 项目等价的功能，整合了 WBI 签名 API、yt-dlp 批量下载、BV 号清理与译名重命名、复制到最终目录。所有子命令默认只读，`--dry-run` 只预览；下载、重命名默认即落地（与旧脚本一致），请先预览再执行。
-
-准备：安装 [yt-dlp](https://github.com/yt-dlp/yt-dlp)，并准备 bilibili 浏览器导出的 Netscape 格式 cookie（默认文件 `www.bilibili.com_cookies.txt`，不要提交到 Git）。
+准备：安装 yt-dlp，并准备浏览器导出的 Netscape 格式 cookie（默认文件 `www.bilibili.com_cookies.txt`，已被 `.gitignore` 排除，请勿提交）。
 
 ```bash
 # 列出 UP 主全部视频（WBI 签名 API）
-python3 walkman.py bilibili list 488970166 --output kaf_all_videos.json
+python3 walkman.py bilibili list 488970166 --output all_videos.json
 
 # 批量获取 BV 号标题/时长
 python3 walkman.py bilibili fetch BV1hD421p7Vy BV17tyHYgELa --output titles.json
 
-# 批量下载 mp3（已有同 BV 文件自动跳过）
-python3 walkman.py bilibili download --input kaf_flat.txt \
-  --output-dir KAF_Covers --no-proxy
+# 批量下载 mp3（自动嵌入视频封面，已有同 BV 文件自动跳过）
+python3 walkman.py bilibili download --input covers.txt \
+  --output-dir Cover_Staging --no-proxy
 
-# 重命名：去掉 [BV] 后缀；配合 JSON 译名表应用中文译名
-python3 walkman.py bilibili rename KAF_Covers --translations trans.json --dry-run
-python3 walkman.py bilibili rename KAF_Covers --translations trans.json
+# 重命名：去掉 [BV] 后缀；配合 JSON 译名表应用译名/规范名
+python3 walkman.py bilibili rename Cover_Staging --translations trans.json --dry-run
+python3 walkman.py bilibili rename Cover_Staging --translations trans.json
 
 # 复制到最终音乐目录（同名跳过）
-python3 walkman.py bilibili copy KAF_Covers "/Volumes/Biwin/Music/花谱"
+python3 walkman.py bilibili copy Cover_Staging "/Volumes/WALKMAN/Music/专辑名"
 ```
 
-译名表是 `{BV号: 新文件名}` 的 JSON。不提供译名表时仅去掉 `[BV]` 后缀；重名文件自动加 `(2)` 序号。下载只处理你有权保存的内容，不绕过 bilibili 的访问控制。
+译名表是 `{BV号: 新文件名}` 的 JSON。不提供译名表时仅去掉 `[BV]` 后缀；重名文件自动加 `(2)` 序号。
+
+### 封面 / 歌词补齐
+
+```bash
+# 为缺封面的音频批量嵌入网易云封面
+python3 tools/embed_cover.py /Volumes/WALKMAN/Music/某目录 --dry-run
+python3 tools/embed_cover.py /Volumes/WALKMAN/Music/某目录
+
+# 为缺 LRC 的音频批量补歌词
+python3 tools/fill_lyrics.py /Volumes/WALKMAN/Music/某目录
+```
+
+## 测试
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+## 注意事项
+
+- 请先安全弹出并重新插入存储卡，再用 Walkman 测试歌词显示与封面；备份目录不要急着删除，确认一切正常后再自行清理；
+- 音频文件、歌词文件、下载 cookie 均不会提交到本仓库（见 `.gitignore`）。
+
+## 免责声明
+
+下载音乐涉及版权与服务条款，请只下载你有权保存或离线使用的内容；本项目不绕过 DRM、VIP 限制或其他访问控制。

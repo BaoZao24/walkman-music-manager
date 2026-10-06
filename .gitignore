@@ -10,3 +10,19 @@ build/
 *cookies*.txt
 cookies.txt
 *.env
+
+# 个人下载与工作文件：音频、歌词、下载暂存目录，不提交、不跟踪
+*.mp3
+*.flac
+*.m4a
+*.ncm
+*.lrc
+*_Covers/
+*_Covers_full/
+kaf_*.json
+kano_*.json
+kaf_*.txt
+kano_*.txt
+
+# 本地工具目录
+.qoder/

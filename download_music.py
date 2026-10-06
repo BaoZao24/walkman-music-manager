@@ -39,15 +39,18 @@ def safe_filename(name: str) -> str:
     return cleaned[:180] or "untitled"
 
 
-def ensure_biwin_mounted(path: Path) -> None:
-    """Refuse writes below /Volumes/Biwin when the card is not mounted."""
-    volume = Path("/Volumes/Biwin")
-    try:
-        path.resolve().relative_to(volume)
-    except ValueError:
+def ensure_volume_mounted(path: Path) -> None:
+    """Refuse writes below /Volumes/<name> when that volume is not mounted.
+
+    When a storage card is absent, macOS silently creates /Volumes/<name> on
+    the system disk, so downloads would land in the wrong place.
+    """
+    parts = path.expanduser().resolve().parts
+    if len(parts) < 3 or parts[1] != "Volumes":
         return
+    volume = Path("/Volumes") / parts[2]
     if not volume.is_mount():
-        raise OSError("/Volumes/Biwin is not mounted; refusing to write to a local fallback directory")
+        raise OSError(f"{volume} is not mounted; refusing to write to a local fallback directory")
 
 
 def read_track_ids(inline_ids: Iterable[str], input_path: Path | None) -> list[str]:
@@ -343,7 +346,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=Path,
         required=True,
-        help="Music output directory, for example /Volumes/Biwin/Music",
+        help="Music output directory, for example /Volumes/WALKMAN/Music",
     )
     parser.add_argument("--quality", choices=["standard", "higher", "exhigh", "lossless", "hires"], default="exhigh")
     parser.add_argument("--lyrics", choices=["original", "translated", "bilingual"], default="translated")
@@ -374,7 +377,7 @@ def main() -> int:
     try:
         track_ids = read_track_ids(args.ids, args.input)
         args.output_dir = args.output_dir.expanduser().resolve()
-        ensure_biwin_mounted(args.output_dir)
+        ensure_volume_mounted(args.output_dir)
         counts: dict[str, int] = defaultdict(int)
         for track_id in track_ids:
             try:
