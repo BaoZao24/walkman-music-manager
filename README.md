@@ -97,6 +97,17 @@ python3 web_app.py
 
 前端可用 AI 规划网易云与 Bilibili 工作流、搜索并下载歌曲、管理翻唱投稿、转换 `.ncm`、修复歌词和归档专辑。写入或下载操作都需要先查看预览，再点击确认执行。默认音乐目录为 `~/Music/Walkman`，可在设置页修改。
 
+### macOS App
+
+在 macOS 上构建可双击启动的应用（需要 Xcode Command Line Tools 提供的 Swift、`sips` 和 `codesign`）：
+
+```bash
+bash packaging/macos/build.sh
+open "$HOME/Applications/Walkman Music Manager.app"
+```
+
+首次构建会在 `.venv-build` 中安装 PyInstaller。应用保存在 `~/Applications`，以避免云同步目录给 app bundle 添加会破坏代码签名的文件属性；也可通过 `APP_DEST` 指定其它保存位置。应用会启动本机服务并打开默认浏览器；Python 运行环境已打包。音乐下载和转换依赖的 `neteasecli`、`yt-dlp`、`ffmpeg`、`ncmdump` 仍需安装在本机，应用会从标准 Homebrew 路径和 `PATH` 中查找。
+
 把 `/Volumes/WALKMAN` 替换为你的存储卡挂载路径：
 
 ```bash

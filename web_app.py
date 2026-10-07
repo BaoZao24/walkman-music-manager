@@ -25,7 +25,7 @@ from urllib.request import Request, urlopen
 from download_music import ensure_volume_mounted
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)).resolve()
 WEB_ROOT = PROJECT_ROOT / "web"
 MAX_REQUEST_BYTES = 256_000
 DEFAULT_LIBRARY_DIR = Path.home() / "Music" / "Walkman"
@@ -333,8 +333,8 @@ def run_search(query: str, limit: int) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         raise ValueError("搜索数量必须是 1 到 100 之间的整数") from exc
     process = subprocess.run(
-        [sys.executable, str(PROJECT_ROOT / "search_music.py"), query, "--limit", str(limit), "--json"],
-        cwd=PROJECT_ROOT,
+        _python_script_command(PROJECT_ROOT / "search_music.py", query, "--limit", str(limit), "--json"),
+        cwd=_process_cwd(),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -350,7 +350,6 @@ def run_search(query: str, limit: int) -> dict[str, Any]:
 
 
 def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
-    python = sys.executable
     walkman = str(PROJECT_ROOT / "walkman.py")
     if action == "download":
         ids = args.get("track_ids", [])
@@ -360,7 +359,7 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
         if not output_dir:
             raise ValueError("请设置下载目标文件夹")
         command = [
-            python, walkman, "download", *[str(item) for item in ids],
+            *_python_script_command(walkman, "download", *[str(item) for item in ids]),
             "--output-dir", str(Path(output_dir).expanduser()),
             "--quality", args.get("quality", "exhigh") if isinstance(args.get("quality"), str) and args.get("quality") in QUALITIES else "exhigh",
             "--lyrics", args.get("lyrics", "translated") if isinstance(args.get("lyrics"), str) and args.get("lyrics") in LYRICS_MODES else "translated",
@@ -369,7 +368,7 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
             command.append("--dry-run")
         return command
     if action.startswith("bili_"):
-        command = [python, walkman, "bilibili"]
+        command = _python_script_command(walkman, "bilibili")
         cookies = _as_text(args.get("cookies"), limit=4096)
         if action == "bili_list":
             try:
@@ -418,7 +417,7 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
         output_dir = _as_text(args.get("output_dir"))
         if not source or not output_dir:
             raise ValueError("请填写 .ncm 来源路径和输出文件夹")
-        command = [python, walkman, "convert", str(Path(source).expanduser()), "--output-dir", str(Path(output_dir).expanduser())]
+        command = _python_script_command(walkman, "convert", str(Path(source).expanduser()), "--output-dir", str(Path(output_dir).expanduser()))
         if args.get("flat") is True:
             command.append("--flat")
         if not apply:
@@ -428,7 +427,7 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
         root = _as_text(args.get("root"))
         if not root:
             raise ValueError("请填写要扫描的音乐文件夹")
-        command = [python, walkman, "repair", str(Path(root).expanduser())]
+        command = _python_script_command(walkman, "repair", str(Path(root).expanduser()))
         if apply:
             command.append("--apply")
         return command
@@ -443,7 +442,7 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
         if target == output_root or not target.is_relative_to(output_root):
             raise ValueError("专辑名称必须是目标文件夹内的相对路径")
         command = [
-            python, walkman, "album", str(Path(source).expanduser()),
+            *_python_script_command(walkman, "album", str(Path(source).expanduser())),
             "--output-dir", str(Path(output_dir).expanduser()),
             "--album-name", album_name,
         ]
@@ -451,6 +450,32 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
             command.append("--dry-run")
         return command
     raise ValueError("不支持的操作")
+
+
+def _python_script_command(script: str | Path, *arguments: str) -> list[str]:
+    """Build a script command that also works inside the packaged macOS app."""
+    if getattr(sys, "frozen", False):
+        cli = Path(sys.executable).with_name("WalkmanCLI")
+        return [str(cli), Path(script).name, *arguments]
+    return [sys.executable, str(script), *arguments]
+
+
+def _process_cwd() -> Path:
+    """Use a writable, predictable directory for Finder-launched app actions."""
+    return Path.home() if getattr(sys, "frozen", False) else PROJECT_ROOT
+
+
+def _prepare_gui_path() -> None:
+    """Finder-launched apps do not inherit Homebrew's shell PATH."""
+    candidates = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/sbin",
+        str(Path.home() / ".local" / "bin"),
+    ]
+    current = os.environ.get("PATH", "").split(os.pathsep)
+    os.environ["PATH"] = os.pathsep.join(dict.fromkeys([*candidates, *current]))
 
 
 def run_action(action: str, args: dict[str, Any], apply: bool) -> dict[str, Any]:
@@ -489,7 +514,7 @@ def run_action(action: str, args: dict[str, Any], apply: bool) -> dict[str, Any]
     if action in {"bili_list", "bili_fetch"}:
         command = action_command(action, args, apply=False)
         process = subprocess.run(
-            command, cwd=PROJECT_ROOT, capture_output=True, text=True,
+            command, cwd=_process_cwd(), capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=600,
         )
         output = "\n".join(part.strip() for part in (process.stdout, process.stderr) if part.strip())
@@ -498,7 +523,7 @@ def run_action(action: str, args: dict[str, Any], apply: bool) -> dict[str, Any]
     timeout = 3600 if action == "bili_download" else 900 if action in {"download", "convert"} else 300
     process = subprocess.run(
         command,
-        cwd=PROJECT_ROOT,
+        cwd=_process_cwd(),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -712,6 +737,9 @@ class WalkmanHandler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
+    if getattr(sys, "frozen", False):
+        _prepare_gui_path()
+
     parser = argparse.ArgumentParser(description="Start the local Walkman Music Manager web app.")
     parser.add_argument("--host", default="127.0.0.1", help="Local bind address")
     parser.add_argument("--port", type=int, default=8765, help="Local port")
@@ -720,12 +748,19 @@ def main() -> int:
         parser.error("为保护本机 API 配置，只允许绑定到 loopback 地址")
     server = ThreadingHTTPServer((args.host, args.port), WalkmanHandler)
     display_host = "localhost" if args.host in {"localhost", "::1"} else "127.0.0.1"
-    print(f"Walkman Music Manager 已启动：http://{display_host}:{server.server_port}")
-    print("按 Ctrl+C 停止。")
+    url = f"http://{display_host}:{server.server_port}"
+    if sys.stdout is not None:
+        print(f"Walkman Music Manager 已启动：{url}")
+        print("按 Ctrl+C 停止。")
+    if getattr(sys, "frozen", False):
+        import webbrowser
+
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n服务已停止。")
+        if sys.stdout is not None:
+            print("\n服务已停止。")
     finally:
         server.server_close()
     return 0
