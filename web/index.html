@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#090909">
+    <title>Walkman Music Manager</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 12h2l2-7 4 14 4-14 3 14 2-7h1"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H10l2 2h7.5A1.5 1.5 0 0 1 21 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/><path d="M3 9h18"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-2-5.8L4 11l6-2.2z"/><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 12 7-12 7z"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+      <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></symbol>
+      <symbol id="i-convert" viewBox="0 0 24 24"><path d="M4 7h14m0 0-3-3m3 3-3 3M20 17H6m0 0 3-3m-3 3 3 3"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    </svg>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#home" data-page="home" aria-label="Walkman 首页">
+          <span class="brand-mark"><svg class="icon"><use href="#i-wave"/></svg></span>
+          <span class="brand-copy"><strong>WALKMAN</strong><small>MUSIC MANAGER</small></span>
+        </a>
+        <div class="nav-label">工作区</div>
+        <nav class="main-nav" aria-label="主导航">
+          <button class="nav-item active" data-page="home" aria-label="工作台"><svg class="icon"><use href="#i-home"/></svg><span>工作台</span><span class="nav-dot"></span></button>
+          <button class="nav-item" data-page="search" aria-label="搜索与下载"><svg class="icon"><use href="#i-search"/></svg><span>搜索与下载</span></button>
+          <button class="nav-item" data-page="bilibili" aria-label="Bilibili 翻唱"><svg class="icon"><use href="#i-video"/></svg><span>Bilibili 翻唱</span></button>
+          <button class="nav-item" data-page="library" aria-label="曲库整理"><svg class="icon"><use href="#i-folder"/></svg><span>曲库整理</span></button>
+        </nav>
+        <div class="nav-label nav-label-settings">偏好设置</div>
+        <nav class="main-nav" aria-label="偏好设置">
+          <button class="nav-item" data-page="settings" aria-label="AI 与 API"><svg class="icon"><use href="#i-sliders"/></svg><span>AI 与 API</span></button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="side-card">
+            <div class="side-card-icon"><svg class="icon"><use href="#i-shield"/></svg></div>
+            <div><strong>本机运行</strong><p>密钥保存在此设备</p></div>
+            <span class="pulse-dot"></span>
+          </div>
+          <div class="profile-row">
+            <span class="avatar">W</span>
+            <span><strong>我的音乐库</strong><small>本地管理</small></span>
+            <span class="profile-more">···</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div class="mobile-brand"><span class="brand-mark"><svg class="icon"><use href="#i-wave"/></svg></span><strong>WALKMAN</strong></div>
+          <div class="breadcrumb"><span>Walkman Music Manager</span><svg class="icon"><use href="#i-arrow"/></svg><strong id="current-page-title">工作台</strong></div>
+          <div class="topbar-right">
+            <span class="local-badge"><span class="pulse-dot"></span>本机服务</span>
+            <button class="icon-button" data-page="settings" aria-label="打开设置"><svg class="icon"><use href="#i-sliders"/></svg></button>
+          </div>
+        </header>
+
+        <div class="page-wrap">
+          <section class="page active" id="page-home">
+            <div class="welcome-row">
+              <div><p class="eyebrow">随身音乐管理</p><h1>把喜欢的音乐，<span>整理进 Walkman。</span></h1><p class="welcome-sub">查找歌曲、整理曲库、修复歌词。</p></div>
+            </div>
+
+            <div class="ai-hero card">
+              <div class="ai-hero-content">
+                <div class="ai-label"><span class="ai-label-icon"><svg class="icon"><use href="#i-spark"/></svg></span><span>AI 助手</span><span class="ai-label-line"></span><span class="ai-model-chip" id="hero-model">尚未配置</span></div>
+                <h2>你想做什么？</h2>
+                <p>用一句话描述任务，AI 会整理成可预览的操作步骤。</p>
+                <form id="ai-prompt-form" class="prompt-box">
+                  <textarea id="ai-prompt" rows="2" placeholder="例如：帮我搜索宇多田光的 First Love，然后下载到 Walkman 文件夹" aria-label="描述音乐整理任务"></textarea>
+                  <div class="prompt-bottom"><span class="prompt-hint"><svg class="icon"><use href="#i-shield"/></svg>执行前会先显示预览</span><button class="button button-primary" type="submit"><svg class="icon"><use href="#i-spark"/></svg><span>让 AI 规划</span><svg class="icon arrow-icon"><use href="#i-arrow"/></svg></button></div>
+                </form>
+              </div>
+            </div>
+
+            <div class="plan-result card hidden" id="plan-result"></div>
+
+            <div class="section-heading"><div><p class="eyebrow">常用操作</p><h2>快速开始</h2></div><button class="text-button" data-page="library">查看全部工具<svg class="icon"><use href="#i-arrow"/></svg></button></div>
+            <div class="quick-grid">
+              <button class="quick-card" data-page="search"><span class="quick-icon quick-icon-lime"><svg class="icon"><use href="#i-search"/></svg></span><span class="quick-copy"><strong>搜索新音乐</strong><small>在网易云查找歌曲</small></span><svg class="icon quick-arrow"><use href="#i-arrow"/></svg></button>
+              <button class="quick-card" data-page="library" data-library-target="convert"><span class="quick-icon quick-icon-violet"><svg class="icon"><use href="#i-convert"/></svg></span><span class="quick-copy"><strong>转换 NCM</strong><small>整理本地下载文件</small></span><svg class="icon quick-arrow"><use href="#i-arrow"/></svg></button>
+              <button class="quick-card" data-page="library" data-library-target="repair"><span class="quick-icon quick-icon-blue"><svg class="icon"><use href="#i-music"/></svg></span><span class="quick-copy"><strong>修复歌词</strong><small>适配 Walkman 显示格式</small></span><svg class="icon quick-arrow"><use href="#i-arrow"/></svg></button>
+            </div>
+
+            <div class="section-heading status-heading"><div><p class="eyebrow">本地环境</p><h2>运行状态</h2></div><span class="refresh-label"><span class="pulse-dot"></span>实时检查</span></div>
+            <div class="status-grid" id="status-grid">
+              <div class="status-card card"><span class="status-icon status-green"><svg class="icon"><use href="#i-search"/></svg></span><div><small>网易云搜索</small><strong data-tool="neteasecli">检查中…</strong></div><span class="status-dot"></span></div>
+              <div class="status-card card"><span class="status-icon status-purple"><svg class="icon"><use href="#i-convert"/></svg></span><div><small>NCM 转换</small><strong data-tool="ncmdump">检查中…</strong></div><span class="status-dot"></span></div>
+              <div class="status-card card"><span class="status-icon status-orange"><svg class="icon"><use href="#i-music"/></svg></span><div><small>封面处理</small><strong data-tool="ffmpeg">检查中…</strong></div><span class="status-dot"></span></div>
+              <div class="status-card card"><span class="status-icon status-teal"><svg class="icon"><use href="#i-spark"/></svg></span><div><small>AI 助手</small><strong data-tool="ai">检查中…</strong></div><span class="status-dot"></span></div>
+            </div>
+            <footer class="page-footer"><span>WALKMAN MUSIC MANAGER</span><span>为你的随身音乐留一点秩序</span></footer>
+          </section>
+
+          <section class="page" id="page-search">
+            <div class="page-intro"><p class="eyebrow">网易云音乐</p><h1>搜索与下载</h1><p>查找歌曲，选择想保存的曲目，再预览下载计划。</p></div>
+            <div class="search-panel card">
+              <form id="search-form" class="search-form"><label class="search-input-wrap"><svg class="icon"><use href="#i-search"/></svg><input id="search-query" type="search" placeholder="搜索歌曲、歌手或关键词…" autocomplete="off"><kbd>⌘ K</kbd></label><button class="button button-primary" type="submit">搜索歌曲<svg class="icon"><use href="#i-arrow"/></svg></button></form>
+              <div class="search-meta"><span>搜索结果</span><span id="search-summary">输入关键词开始探索</span></div>
+              <div class="track-table-wrap" id="track-table-wrap"><div class="empty-state"><span class="empty-art"><svg class="icon"><use href="#i-music"/></svg></span><strong>让下一首喜欢的歌出现</strong><p>搜索歌名、歌手或你记得的一句歌词。</p></div></div>
+            </div>
+            <div class="download-panel card hidden" id="download-panel">
+              <div class="panel-heading"><div><p class="eyebrow">下载选项</p><h2>下载清单 <span id="selected-count">0 首</span></h2></div><button class="text-button" id="clear-selection">清空选择<svg class="icon"><use href="#i-close"/></svg></button></div>
+              <form id="download-form" class="form-grid">
+                <label class="field field-wide"><span>保存到</span><input id="download-output" type="text" autocomplete="off"></label>
+                <label class="field"><span>音质</span><select id="download-quality"><option value="exhigh">极高音质</option><option value="lossless">无损</option><option value="hires">Hi-Res</option><option value="higher">较高音质</option><option value="standard">标准音质</option></select></label>
+                <label class="field"><span>歌词</span><select id="download-lyrics"><option value="translated">中文翻译</option><option value="bilingual">双语</option><option value="original">原文</option></select></label>
+                <div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-shield"/></svg>下载前可先检查文件计划</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-play"/></svg>预览下载</button></div>
+              </form>
+              <div class="operation-result hidden" id="download-result"></div>
+            </div>
+          </section>
+
+          <section class="page" id="page-bilibili">
+            <div class="page-intro"><p class="eyebrow">Bilibili 音乐</p><h1>Bilibili 翻唱整理</h1><p>从 UP 主投稿或 BV 视频开始，下载音频、整理文件名，再复制到 Walkman 音乐库。</p></div>
+            <div class="tool-tabs bili-tabs" role="tablist">
+              <button class="tool-tab active" data-bili-tab="list"><svg class="icon"><use href="#i-video"/></svg>UP 主投稿</button>
+              <button class="tool-tab" data-bili-tab="fetch"><svg class="icon"><use href="#i-search"/></svg>BV 信息</button>
+              <button class="tool-tab" data-bili-tab="download"><svg class="icon"><use href="#i-music"/></svg>下载翻唱</button>
+              <button class="tool-tab" data-bili-tab="organize"><svg class="icon"><use href="#i-folder"/></svg>文件整理</button>
+            </div>
+            <div class="bili-content active" id="bili-list">
+              <div class="tool-layout"><div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-blue"><svg class="icon"><use href="#i-video"/></svg></span><div><p class="eyebrow">投稿列表</p><h2>列出 UP 主全部投稿</h2></div></div><p class="tool-description">按发布时间读取 UP 主投稿，查看 BV 号和视频标题。需要本地 Netscape 格式 Cookie 文件。</p><form class="form-grid operation-form" data-action="bili_list"><label class="field"><span>UP 主 UID</span><input name="uid" type="number" min="1" placeholder="例如：488970166" required></label><label class="field"><span>Cookie 文件</span><input name="cookies" type="text" required></label><div class="info-strip field-wide"><svg class="icon"><use href="#i-shield"/></svg><span>Cookie 只由本机脚本读取，不会发送到 AI 服务。</span></div><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-clock"/></svg>只读取投稿信息</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-search"/></svg>查询投稿</button></div></form><div class="operation-result hidden"></div></div><aside class="tool-aside aside-blue card"><span class="aside-number">01</span><p class="eyebrow">投稿查询</p><h3>发现 UP 主的新作品</h3><ul><li><span class="list-check">✓</span>按发布时间获取投稿</li><li><span class="list-check">✓</span>列出 BV 号与视频标题</li><li><span class="list-check">✓</span>查询操作不会写入音乐文件</li></ul><div class="aside-foot"><svg class="icon"><use href="#i-shield"/></svg>本机 cookie 文件不会上传</div></aside></div>
+            </div>
+            <div class="bili-content" id="bili-fetch">
+              <div class="tool-layout"><div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-purple"><svg class="icon"><use href="#i-search"/></svg></span><div><p class="eyebrow">视频信息</p><h2>查询 BV 标题与时长</h2></div></div><p class="tool-description">粘贴 BV 号或 Bilibili 视频链接，批量读取标题与视频时长。</p><form class="form-grid operation-form" data-action="bili_fetch"><label class="field field-wide"><span>BV 号或视频链接</span><textarea name="bvids" rows="4" placeholder="每行一个，例如：BV1hD421p7Vy" required></textarea></label><label class="field field-wide"><span>Cookie 文件（可留空使用公开信息）</span><input name="cookies" type="text"></label><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-clock"/></svg>只读取视频信息</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-search"/></svg>查询 BV 信息</button></div></form><div class="operation-result hidden"></div></div><aside class="tool-aside card"><span class="aside-number">02</span><p class="eyebrow">视频查询</p><h3>从视频链接提取信息</h3><ul><li><span class="list-check">✓</span>支持直接粘贴完整链接</li><li><span class="list-check">✓</span>自动去重 BV 号</li><li><span class="list-check">✓</span>一次最多查询 200 个</li></ul><div class="aside-foot"><svg class="icon"><use href="#i-shield"/></svg>不下载视频内容</div></aside></div>
+            </div>
+            <div class="bili-content" id="bili-download">
+              <div class="tool-layout"><div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-amber"><svg class="icon"><use href="#i-music"/></svg></span><div><p class="eyebrow">下载音频</p><h2>下载翻唱音频</h2></div></div><p class="tool-description">用 yt-dlp 下载视频音频为 MP3，并尝试嵌入视频封面。先查看 BV 清单和暂存位置，再确认下载。</p><form class="form-grid operation-form" data-action="bili_download"><label class="field field-wide"><span>BV 号或视频链接</span><textarea name="bvids" rows="4" placeholder="每行一个 BV 号或视频链接" required></textarea></label><label class="field field-wide"><span>下载暂存文件夹</span><input name="output_dir" type="text" required></label><label class="field field-wide"><span>Cookie 文件（可留空）</span><input name="cookies" type="text"></label><label class="check-field field-wide"><input name="no_proxy" type="checkbox"><span class="fake-check"><svg class="icon"><use href="#i-check"/></svg></span><span>下载时强制直连，绕过系统代理</span></label><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-shield"/></svg>下载前会显示目标和 BV 清单</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-play"/></svg>预览下载</button></div></form><div class="operation-result hidden"></div></div><aside class="tool-aside aside-amber card"><span class="aside-number">03</span><p class="eyebrow">音频下载</p><h3>音频和封面一起整理</h3><ul><li><span class="list-check">✓</span>需要安装 yt-dlp 与 ffmpeg</li><li><span class="list-check">✓</span>已有同 BV 文件自动跳过</li><li><span class="list-check">✓</span>失败 BV 号会另存清单</li></ul><div class="aside-foot"><svg class="icon"><use href="#i-shield"/></svg>下载内容请遵守服务条款</div></aside></div>
+            </div>
+            <div class="bili-content" id="bili-organize">
+              <div class="bili-organize-grid">
+                <div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-purple"><svg class="icon"><use href="#i-sliders"/></svg></span><div><p class="eyebrow">文件命名</p><h2>整理翻唱文件名</h2></div></div><p class="tool-description">移除 BV 后缀，可选读取 JSON 译名表。重名时自动添加序号。</p><form class="form-grid operation-form" data-action="bili_rename"><label class="field field-wide"><span>翻唱暂存文件夹</span><input name="source" type="text" required></label><label class="field field-wide"><span>译名表 JSON（可选）</span><input name="translations" type="text" placeholder="例如：~/Music/translations.json"></label><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-shield"/></svg>先预览新文件名</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-play"/></svg>预览重命名</button></div></form><div class="operation-result hidden"></div></div>
+                <div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-blue"><svg class="icon"><use href="#i-folder"/></svg></span><div><p class="eyebrow">加入曲库</p><h2>复制到音乐库</h2></div></div><p class="tool-description">复制整理好的音频；目标位置已有同名文件时会自动跳过。</p><form class="form-grid operation-form" data-action="bili_copy"><label class="field field-wide"><span>翻唱暂存文件夹</span><input name="source" type="text" required></label><label class="field field-wide"><span>最终音乐文件夹</span><input name="dest" type="text" required></label><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-shield"/></svg>先检查复制清单</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-play"/></svg>预览复制</button></div></form><div class="operation-result hidden"></div></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="page" id="page-library">
+            <div class="page-intro"><p class="eyebrow">Walkman 曲库</p><h1>曲库整理</h1><p>整理本地音乐，让专辑、封面和歌词都能在 Walkman 上正常显示。</p></div>
+            <div class="tool-tabs" role="tablist"><button class="tool-tab active" data-tool-tab="convert"><svg class="icon"><use href="#i-convert"/></svg>转换 NCM</button><button class="tool-tab" data-tool-tab="repair"><svg class="icon"><use href="#i-music"/></svg>修复歌词</button><button class="tool-tab" data-tool-tab="album"><svg class="icon"><use href="#i-folder"/></svg>专辑归档</button></div>
+            <div class="tool-content active" id="tool-convert">
+              <div class="tool-layout"><div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-purple"><svg class="icon"><use href="#i-convert"/></svg></span><div><p class="eyebrow">格式转换</p><h2>转换 .ncm 文件</h2></div></div><p class="tool-description">扫描来源文件夹中的 NCM 音乐，转换为 Walkman 可播放的音频，并按歌手归档。</p><form class="form-grid operation-form" data-action="convert"><label class="field field-wide"><span>来源文件或文件夹</span><input name="source" type="text" placeholder="例如：~/Music/网易云音乐" required></label><label class="field field-wide"><span>转换后保存到</span><input name="output_dir" type="text" required></label><label class="check-field field-wide"><input name="flat" type="checkbox"><span class="fake-check"><svg class="icon"><use href="#i-check"/></svg></span><span>所有歌曲放在同一文件夹</span></label><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-shield"/></svg>默认先预览，不会立即转换</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-play"/></svg>预览转换</button></div></form><div class="operation-result hidden"></div></div><aside class="tool-aside card"><span class="aside-number">01</span><p class="eyebrow">需要准备</p><h3>让 NCM 顺利变成音乐</h3><ul><li><span class="list-check">✓</span>安装 <code>ncmdump</code></li><li><span class="list-check">✓</span>确认来源文件夹可访问</li><li><span class="list-check">✓</span>检查目标磁盘剩余空间</li></ul><div class="aside-foot"><svg class="icon"><use href="#i-shield"/></svg>已有同名歌曲默认跳过</div></aside></div>
+            </div>
+            <div class="tool-content" id="tool-repair">
+              <div class="tool-layout"><div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-blue"><svg class="icon"><use href="#i-music"/></svg></span><div><p class="eyebrow">歌词修复</p><h2>修复 Walkman 歌词</h2></div></div><p class="tool-description">清理不兼容的歌词元数据，统一编码与时间戳。正式写入前会为改动建立备份。</p><form class="form-grid operation-form" data-action="repair"><label class="field field-wide"><span>扫描文件夹</span><input name="root" type="text" required></label><div class="info-strip field-wide"><svg class="icon"><use href="#i-shield"/></svg><span>执行修复时会在该目录内建立带时间戳的隐藏备份文件夹。</span></div><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-shield"/></svg>先扫描并查看待修复数量</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-play"/></svg>预览修复</button></div></form><div class="operation-result hidden"></div></div><aside class="tool-aside card aside-blue"><span class="aside-number">02</span><p class="eyebrow">Walkman 歌词</p><h3>更稳妥地修好歌词</h3><ul><li><span class="list-check">✓</span>保留带时间戳的歌词行</li><li><span class="list-check">✓</span>支持 UTF-8 与 GB18030</li><li><span class="list-check">✓</span>写入前自动备份原文件</li></ul><div class="aside-foot"><svg class="icon"><use href="#i-shield"/></svg>AppleDouble 文件会自动跳过</div></aside></div>
+            </div>
+            <div class="tool-content" id="tool-album">
+              <div class="tool-layout"><div class="tool-main card"><div class="tool-title-row"><span class="tool-icon tool-amber"><svg class="icon"><use href="#i-folder"/></svg></span><div><p class="eyebrow">专辑整理</p><h2>整理为专辑目录</h2></div></div><p class="tool-description">把指定文件夹第一层的音频和歌词移动到一个专辑目录，保持音乐库清爽。</p><form class="form-grid operation-form" data-action="album"><label class="field field-wide"><span>待整理的来源文件夹</span><input name="source" type="text" required></label><label class="field field-wide"><span>音乐库位置</span><input name="output_dir" type="text" required></label><label class="field field-wide"><span>专辑文件夹名称</span><input name="album_name" type="text" placeholder="例如：RADWIMPS / 你的名字。" required></label><div class="info-strip field-wide"><svg class="icon"><use href="#i-shield"/></svg><span>只整理来源目录第一层文件，子文件夹不会递归移动。</span></div><div class="form-actions field-wide"><span class="safe-note"><svg class="icon"><use href="#i-shield"/></svg>先查看将移动的文件</span><button class="button button-outline" type="submit"><svg class="icon"><use href="#i-play"/></svg>预览归档</button></div></form><div class="operation-result hidden"></div></div><aside class="tool-aside aside-amber card"><span class="aside-number">03</span><p class="eyebrow">专辑归档</p><h3>让专辑各自归位</h3><ul><li><span class="list-check">✓</span>音频与同名 LRC 一起移动</li><li><span class="list-check">✓</span>已存在的同名文件默认跳过</li><li><span class="list-check">✓</span>移动前可完整预览清单</li></ul><div class="aside-foot"><svg class="icon"><use href="#i-shield"/></svg>不会递归整理整个曲库</div></aside></div>
+            </div>
+          </section>
+
+          <section class="page" id="page-settings">
+            <div class="page-intro"><p class="eyebrow">AI 服务</p><h1>AI 与 API</h1><p>配置一个 OpenAI 兼容接口，让 AI 把自然语言变成清晰的音乐整理计划。</p></div>
+            <div class="settings-layout">
+              <div class="settings-main card"><div class="settings-heading"><span class="settings-art"><svg class="icon"><use href="#i-spark"/></svg></span><div><p class="eyebrow">服务配置</p><h2>连接你的 AI 服务</h2><p>支持 OpenAI 兼容的聊天补全接口。</p></div><span class="connection-state" id="connection-state"><i></i><span>未连接</span></span></div>
+                <form id="settings-form" class="form-grid settings-form">
+                  <label class="field field-wide"><span>API Base URL</span><input id="setting-base-url" type="url" placeholder="https://api.openai.com/v1" required><small>填写服务商提供的 API 根地址，不需要加 /chat/completions。</small></label>
+                  <label class="field field-wide"><span>模型名称</span><input id="setting-model" type="text" placeholder="例如：gpt-4o-mini" required></label>
+                  <label class="field field-wide"><span>API Key</span><input id="setting-api-key" type="password" autocomplete="new-password" placeholder="粘贴你的 API Key"><small id="key-hint">密钥只保存在本机配置文件中，不会回传到页面。</small></label>
+                  <label class="check-field field-wide clear-key-row hidden" id="clear-key-row"><input id="clear-api-key" type="checkbox"><span class="fake-check"><svg class="icon"><use href="#i-check"/></svg></span><span>移除已保存的 API Key</span></label>
+                  <div class="settings-divider field-wide"></div>
+                  <label class="field field-wide"><span>默认音乐文件夹</span><input id="setting-library-dir" type="text" placeholder="~/Music/Walkman" required><small>用于下载歌曲和作为 AI 计划中的默认目标路径。</small></label>
+                  <div class="form-actions field-wide settings-actions"><span class="secure-caption"><svg class="icon"><use href="#i-shield"/></svg>本机配置 · 权限受限</span><div><button class="button button-outline" type="button" id="test-api"><svg class="icon"><use href="#i-play"/></svg>测试连接</button><button class="button button-primary" type="submit">保存设置<svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
+                </form>
+              </div>
+              <aside class="privacy-card card"><div class="privacy-illustration"><div class="privacy-shape shape-a"></div><div class="privacy-shape shape-b"></div><span><svg class="icon"><use href="#i-shield"/></svg></span></div><p class="eyebrow">本机安全</p><h3>配置留在你的设备</h3><p>API Key 保存在用户配置目录，服务进程会在调用 AI 时使用它。前端只会收到“已配置”状态。</p><div class="privacy-line"></div><div class="privacy-detail"><span class="privacy-check">✓</span><span>本机服务只绑定回环地址</span></div><div class="privacy-detail"><span class="privacy-check">✓</span><span>密钥文件设置为仅当前用户可读</span></div><div class="privacy-detail"><span class="privacy-check">✓</span><span>AI 输出仅作为待确认计划</span></div></aside>
+            </div>
+            <footer class="page-footer"><span>WALKMAN MUSIC MANAGER</span><span>AI 负责理解，由你决定</span></footer>
+          </section>
+        </div>
+      </main>
+    </div>
+    <div class="toast-region" id="toast-region" aria-live="polite"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

@@ -85,6 +85,18 @@ neteasecli auth check
 
 ## 快速开始
 
+### 本机 Web 前端
+
+启动本机管理界面（Python 3.10+，无额外 Python 依赖）：
+
+```bash
+python3 web_app.py
+```
+
+打开终端提示的 `http://127.0.0.1:8765`，在 **AI 与 API** 页面填写 OpenAI 兼容服务的 API 地址、模型名称和 API Key。密钥保存在用户目录下的 `~/.config/walkman-music-manager/settings.json`，仅当前用户可读；页面不会接收已保存的密钥。也可配置无 Key 的本机兼容服务。
+
+前端可用 AI 规划网易云与 Bilibili 工作流、搜索并下载歌曲、管理翻唱投稿、转换 `.ncm`、修复歌词和归档专辑。写入或下载操作都需要先查看预览，再点击确认执行。默认音乐目录为 `~/Music/Walkman`，可在设置页修改。
+
 把 `/Volumes/WALKMAN` 替换为你的存储卡挂载路径：
 
 ```bash
