@@ -14,12 +14,11 @@ import json
 import re
 import subprocess
 import sys
-import tempfile
 import time
 import unicodedata
 from pathlib import Path
 
-NETEASECLI_DIR = Path("/opt/homebrew/lib/node_modules/neteasecli")
+from netease_support import run_node
 WR = Path(__file__).resolve().parent.parent
 AUDIO_EXT = {".flac", ".mp3", ".m4a"}
 
@@ -29,28 +28,10 @@ def norm(s: str) -> str:
     return re.sub(r"[\s\-_.,!?！？:：'\"()（）\[\]【】~～〜・\uff5e⧸_／*×#/]", "", s.lower())
 
 
-def run_node(body: str) -> str:
-    script = Path(tempfile.gettempdir()) / "fill_lyrics_tmp.mjs"
-    script.write_text(
-        "import { getApiClient } from '"
-        + str(NETEASECLI_DIR)
-        + "/dist/api/client.js';\nconst c = getApiClient();\n"
-        + body,
-        encoding="utf-8",
-    )
-    try:
-        r = subprocess.run(["node", str(script)], capture_output=True, text=True,
-                           cwd=NETEASECLI_DIR, timeout=60)
-        out = r.stdout.strip().splitlines()
-        return out[-1] if out else ""
-    finally:
-        script.unlink(missing_ok=True)
-
-
 def search_id(song: str) -> str | None:
-    song_esc = song.replace("'", "\\'")
+    song_esc = json.dumps(song, ensure_ascii=False)
     body = (
-        f"const r = await c.request('/cloudsearch/get/web', {{ s: '{song_esc}', type: 1, limit: 1, offset: 0 }}, 'weapi');\n"
+        f"const r = await c.request('/cloudsearch/get/web', {{ s: {song_esc}, type: 1, limit: 1, offset: 0 }}, 'weapi');\n"
         f"const t = r.result?.songs?.[0];\n"
         f"console.log(t ? t.id + '|' + t.name + '|' + (t.ar?.map(a=>a.name).join(',')) : '');\n"
     )
@@ -105,7 +86,7 @@ def main() -> int:
         print(f"路径不存在: {target}", file=sys.stderr)
         return 2
 
-    files = sorted(target.rglob("*")) if args.recursive else sorted(target.iterdir())
+    files = [target] if target.is_file() else sorted(target.rglob("*") if args.recursive else target.iterdir())
     audios = [p for p in files if p.is_file() and not p.name.startswith("._") and p.suffix.lower() in AUDIO_EXT]
     missing = [p for p in audios if not p.with_suffix(".lrc").exists()]
     print(f"音频 {len(audios)}, 缺 lrc {len(missing)}")

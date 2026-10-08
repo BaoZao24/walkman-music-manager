@@ -8,12 +8,12 @@ import sys
 from pathlib import Path
 
 
-ALLOWED_SCRIPTS = {"search_music.py", "walkman.py"}
+ALLOWED_SCRIPTS = {"search_music.py", "walkman.py", "tools/fill_lyrics.py", "tools/embed_cover.py"}
 
 
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in ALLOWED_SCRIPTS:
-        print("用法：WalkmanCLI <search_music.py|walkman.py> [参数…]", file=sys.stderr)
+        print("用法：WalkmanCLI <内置音乐工具> [参数…]", file=sys.stderr)
         return 2
 
     project_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -23,6 +23,7 @@ def main() -> int:
         return 2
 
     sys.path.insert(0, str(project_root))
+    sys.path.insert(0, str(script.parent))
     sys.argv = [str(script), *sys.argv[2:]]
     runpy.run_path(str(script), run_name="__main__")
     return 0

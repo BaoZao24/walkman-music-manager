@@ -12,17 +12,21 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 
 from download_music import ensure_volume_mounted
+from ai_agent import AgentCancelled, AgentManager, TOOL_SPECS, TOOLS
 
 
 PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)).resolve()
@@ -34,10 +38,13 @@ DEFAULT_SETTINGS = {
     "model": "gpt-4o-mini",
     "api_key": "",
     "library_dir": str(DEFAULT_LIBRARY_DIR),
+    "bilibili_cookies": str(Path.home() / "www.bilibili.com_cookies.txt"),
 }
 QUALITIES = {"standard", "higher", "exhigh", "lossless", "hires"}
 LYRICS_MODES = {"original", "translated", "bilingual"}
 TRACK_ID_RE = re.compile(r"^\d+$")
+PROCESS_LOCK = threading.Lock()
+ACTIVE_PROCESSES: set[subprocess.Popen] = set()
 
 
 def settings_path() -> Path:
@@ -71,6 +78,7 @@ def public_settings(settings: dict[str, str]) -> dict[str, Any]:
         "api_key_configured": api_key_configured,
         "ai_configured": api_key_configured or local_endpoint,
         "library_dir": settings["library_dir"],
+        "bilibili_cookies": settings.get("bilibili_cookies", ""),
     }
 
 
@@ -113,19 +121,17 @@ def chat_completions_url(base_url: str) -> str:
     return base_url + "/chat/completions"
 
 
-def call_chat_api(
-    settings: dict[str, str], messages: list[dict[str, str]], timeout: int = 60
-) -> str:
+def call_chat_message(
+    settings: dict[str, str], messages: list[dict[str, Any]],
+    timeout: int = 60, tools: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     base_url = validate_base_url(settings["api_base_url"])
     if not settings["model"].strip():
         raise ValueError("请先设置模型名称")
-    payload = json.dumps(
-        {
-            "model": settings["model"],
-            "messages": messages,
-            "temperature": 0.1,
-        }
-    ).encode("utf-8")
+    body: dict[str, Any] = {"model": settings["model"], "messages": messages, "temperature": 0.1}
+    if tools is not None:
+        body.update({"tools": tools, "tool_choice": "auto"})
+    payload = json.dumps(body).encode("utf-8")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if settings["api_key"]:
         headers["Authorization"] = f"Bearer {settings['api_key']}"
@@ -142,189 +148,36 @@ def call_chat_api(
         raise RuntimeError("AI 服务没有返回有效 JSON") from exc
 
     try:
-        content = result["choices"][0]["message"]["content"]
+        message = result["choices"][0]["message"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError("AI 服务响应中没有 choices[0].message.content") from exc
+        raise RuntimeError("AI 服务响应中没有 choices[0].message") from exc
+    if not isinstance(message, dict):
+        raise RuntimeError("AI 服务返回的消息格式无效")
+    content = message.get("content")
     if isinstance(content, list):
         content = "".join(
             str(part.get("text", ""))
             for part in content
             if isinstance(part, dict)
         )
+    message["content"] = content
+    return message
+
+
+def call_chat_api(
+    settings: dict[str, str], messages: list[dict[str, str]], timeout: int = 60
+) -> str:
+    content = call_chat_message(settings, messages, timeout=timeout).get("content")
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError("AI 服务返回了空内容")
     return content.strip()
-
-
-def extract_json_object(content: str) -> dict[str, Any]:
-    candidate = content.strip()
-    if candidate.startswith("```"):
-        candidate = re.sub(r"^```(?:json)?\s*|\s*```$", "", candidate, flags=re.I)
-    start, end = candidate.find("{"), candidate.rfind("}")
-    if start < 0 or end <= start:
-        raise ValueError("AI 没有返回任务 JSON，请重试或换一种说法")
-    try:
-        result = json.loads(candidate[start : end + 1])
-    except json.JSONDecodeError as exc:
-        raise ValueError("AI 返回的任务格式无法解析，请重试") from exc
-    if not isinstance(result, dict):
-        raise ValueError("AI 返回的任务格式无效")
-    return result
 
 
 def _as_text(value: Any, *, limit: int = 4096) -> str:
     return value.strip()[:limit] if isinstance(value, str) else ""
 
 
-def _as_questions(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [_as_text(item, limit=300) for item in value if _as_text(item, limit=300)][:5]
-
-
-def normalize_plan(raw: dict[str, Any], library_dir: str) -> dict[str, Any]:
-    action = raw.get("action")
-    if not isinstance(action, str) or action not in {
-        "search", "download", "convert", "repair", "album", "bili_list",
-        "bili_fetch", "bili_download", "bili_rename", "bili_copy", "none",
-    }:
-        raise ValueError("AI 建议了不支持的操作，请换一种说法")
-    raw_args = raw.get("args")
-    args = raw_args if isinstance(raw_args, dict) else {}
-    summary = _as_text(raw.get("summary"), limit=500) or "已生成一个待确认的音乐整理任务。"
-    questions = _as_questions(raw.get("questions"))
-    normalized: dict[str, Any] = {}
-
-    if action == "search":
-        try:
-            limit = int(args.get("limit", 10) or 10)
-        except (TypeError, ValueError):
-            limit = 10
-        normalized = {
-            "query": _as_text(args.get("query"), limit=300),
-            "limit": max(1, min(50, limit)),
-        }
-        if not normalized["query"]:
-            questions.append("你想搜索哪首歌、哪位歌手或什么关键词？")
-    elif action == "download":
-        ids = args.get("track_ids", [])
-        if isinstance(ids, str):
-            ids = re.split(r"[\s,，]+", ids)
-        if not isinstance(ids, list):
-            ids = []
-        normalized = {
-            "track_ids": list(dict.fromkeys(str(item).strip() for item in ids if TRACK_ID_RE.fullmatch(str(item).strip())))[:200],
-            "query": _as_text(args.get("query"), limit=300),
-            "output_dir": _as_text(args.get("output_dir"), limit=4096) or library_dir,
-            "quality": args.get("quality") if isinstance(args.get("quality"), str) and args.get("quality") in QUALITIES else "exhigh",
-            "lyrics": args.get("lyrics") if isinstance(args.get("lyrics"), str) and args.get("lyrics") in LYRICS_MODES else "translated",
-        }
-        if not normalized["track_ids"]:
-            questions.append("请先在搜索结果里选歌，或提供网易云音乐歌曲 ID。")
-    elif action == "convert":
-        normalized = {
-            "source": _as_text(args.get("source"), limit=4096),
-            "output_dir": _as_text(args.get("output_dir"), limit=4096) or library_dir,
-            "flat": args.get("flat") is True,
-        }
-        if not normalized["source"]:
-            questions.append("请提供 .ncm 文件或文件夹的本机路径。")
-    elif action == "repair":
-        normalized = {"root": _as_text(args.get("root"), limit=4096) or library_dir}
-    elif action == "album":
-        normalized = {
-            "source": _as_text(args.get("source"), limit=4096),
-            "output_dir": _as_text(args.get("output_dir"), limit=4096) or library_dir,
-            "album_name": _as_text(args.get("album_name"), limit=300),
-        }
-        if not normalized["source"]:
-            questions.append("请提供要整理的源文件夹路径。")
-        if not normalized["album_name"]:
-            questions.append("请提供目标专辑文件夹名称。")
-    elif action == "bili_list":
-        try:
-            uid = int(args.get("uid", 0))
-        except (TypeError, ValueError):
-            uid = 0
-        normalized = {
-            "uid": uid,
-            "cookies": _as_text(args.get("cookies"), limit=4096) or "www.bilibili.com_cookies.txt",
-        }
-        if uid <= 0:
-            questions.append("请提供 B 站 UP 主的 UID。")
-    elif action in {"bili_fetch", "bili_download"}:
-        try:
-            bvids = normalize_bvids(args.get("bvids", []))
-        except ValueError:
-            bvids = []
-        normalized = {
-            "bvids": bvids,
-            "cookies": _as_text(args.get("cookies"), limit=4096) or "www.bilibili.com_cookies.txt",
-        }
-        if action == "bili_download":
-            normalized.update({
-                "output_dir": _as_text(args.get("output_dir"), limit=4096) or str(Path(library_dir) / "Bilibili-Staging"),
-                "no_proxy": args.get("no_proxy") is True,
-            })
-        if not bvids:
-            questions.append("请提供 B 站 BV 号或视频链接。")
-    elif action == "bili_rename":
-        normalized = {
-            "source": _as_text(args.get("source"), limit=4096),
-            "translations": _as_text(args.get("translations"), limit=4096),
-        }
-        if not normalized["source"]:
-            questions.append("请提供已下载翻唱所在的暂存文件夹。")
-    elif action == "bili_copy":
-        normalized = {
-            "source": _as_text(args.get("source"), limit=4096),
-            "dest": _as_text(args.get("dest"), limit=4096) or library_dir,
-        }
-        if not normalized["source"]:
-            questions.append("请提供翻唱暂存文件夹。")
-
-    return {
-        "action": action,
-        "summary": summary,
-        "args": normalized,
-        "questions": list(dict.fromkeys(questions))[:5],
-    }
-
-
-def build_plan(prompt: str, settings: dict[str, str]) -> dict[str, Any]:
-    library_dir = settings["library_dir"]
-    system_message = f"""你是 Walkman Music Manager 的音乐工作流规划器。根据用户要求，把任务映射到一个本机操作。
-只返回一个 JSON 对象，不要 Markdown，不要解释。结构：
-{{"action":"search|download|convert|repair|album|bili_list|bili_fetch|bili_download|bili_rename|bili_copy|none","summary":"简短中文说明","args":{{}},"questions":[]}}
-
-规则：
-- 只能规划 search、download、convert、repair、album、bili_list、bili_fetch、bili_download、bili_rename、bili_copy、none；不要规划 shell、删除、覆盖、递归整理等操作。
-- search 参数：query 字符串、limit 整数（默认 10）。
-- download 参数：track_ids 数字 ID 数组、可选 query、output_dir、quality、lyrics。没有明确 ID 时优先用 search（如果用户说的是找歌）；没有歌曲关键词时在 questions 中要求先搜索选歌。
-- convert 参数：source 本机路径、output_dir、flat 布尔值。source 未提供时在 questions 中询问，禁止编造路径。
-- repair 参数：root 本机路径；用户没有给 root 时可使用默认音乐目录 {library_dir}。
-- album 参数：source 本机路径、output_dir、album_name。source 或专辑名未提供时在 questions 中询问，禁止编造路径。
-- bili_list 参数：uid（只能使用用户提供的数字 UID）、cookies（默认 www.bilibili.com_cookies.txt）。
-- bili_fetch 参数：bvids（来自用户文字的 BV 号或视频链接数组）、cookies。
-- bili_download 参数：bvids、output_dir、cookies、no_proxy。
-- bili_rename 参数：source、可选 translations JSON 路径。
-- bili_copy 参数：source、dest（默认音乐目录）。
-- output_dir 未指定时使用默认音乐目录 {library_dir}。
-- 网易云歌曲 ID 必须来自用户文字；不得猜测 ID。不要把自然语言描述当路径。
-- 如果任务与这些操作无关，使用 action=none，并在 questions 中简短说明。
-- 任何任务都只是建议；用户会先查看预览，再单独确认执行。"""
-    content = call_chat_api(
-        settings,
-        [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt[:8000]},
-        ],
-        timeout=90,
-    )
-    return normalize_plan(extract_json_object(content), library_dir)
-
-
-def run_search(query: str, limit: int) -> dict[str, Any]:
+def run_search(query: str, limit: int, *, cancel_event=None, on_progress=None) -> dict[str, Any]:
     query = query.strip()
     if not query:
         raise ValueError("请输入歌曲名、歌手或关键词")
@@ -332,14 +185,10 @@ def run_search(query: str, limit: int) -> dict[str, Any]:
         limit = max(1, min(100, int(limit)))
     except (TypeError, ValueError) as exc:
         raise ValueError("搜索数量必须是 1 到 100 之间的整数") from exc
-    process = subprocess.run(
+    process = run_local_process(
         _python_script_command(PROJECT_ROOT / "search_music.py", query, "--limit", str(limit), "--json"),
-        cwd=_process_cwd(),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         timeout=90,
+        cancel_event=cancel_event,
     )
     if process.returncode != 0:
         raise RuntimeError((process.stderr or process.stdout or "搜索失败").strip()[-8000:])
@@ -366,6 +215,11 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
         ]
         if not apply:
             command.append("--dry-run")
+        for field, flag in (("by_album", "--by-album"), ("flat", "--flat")):
+            if args.get(field) is True:
+                command.append(flag)
+        if args.get("translate_japanese") is True:
+            command.extend(["--translate-japanese", "--translation-model", args.get("_translation_model", DEFAULT_SETTINGS["model"])])
         return command
     if action.startswith("bili_"):
         command = _python_script_command(walkman, "bilibili")
@@ -409,6 +263,8 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
             raise ValueError("不支持的哔哩哔哩操作")
         if cookies:
             command.extend(["--cookies", str(Path(cookies).expanduser())])
+        if action in {"bili_list", "bili_fetch"} and args.get("_result_path"):
+            command.extend(["--output", str(args["_result_path"])])
         if action in {"bili_rename", "bili_copy"} and not apply:
             command.append("--dry-run")
         return command
@@ -420,6 +276,8 @@ def action_command(action: str, args: dict[str, Any], apply: bool) -> list[str]:
         command = _python_script_command(walkman, "convert", str(Path(source).expanduser()), "--output-dir", str(Path(output_dir).expanduser()))
         if args.get("flat") is True:
             command.append("--flat")
+        if args.get("translate_japanese") is True:
+            command.extend(["--translate-japanese", "--translation-model", args.get("_translation_model", DEFAULT_SETTINGS["model"])])
         if not apply:
             command.append("--dry-run")
         return command
@@ -456,7 +314,7 @@ def _python_script_command(script: str | Path, *arguments: str) -> list[str]:
     """Build a script command that also works inside the packaged macOS app."""
     if getattr(sys, "frozen", False):
         cli = Path(sys.executable).with_name("WalkmanCLI")
-        return [str(cli), Path(script).name, *arguments]
+        return [str(cli), Path(script).relative_to(PROJECT_ROOT).as_posix(), *arguments]
     return [sys.executable, str(script), *arguments]
 
 
@@ -478,9 +336,78 @@ def _prepare_gui_path() -> None:
     os.environ["PATH"] = os.pathsep.join(dict.fromkeys([*candidates, *current]))
 
 
-def run_action(action: str, args: dict[str, Any], apply: bool) -> dict[str, Any]:
+def stop_local_process(process: subprocess.Popen) -> None:
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    elif process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            process.kill()
+        process.wait(timeout=2)
+
+
+def run_local_process(command: list[str], timeout: int, *, cancel_event=None, on_progress=None, environment=None):
+    """Capture tool output and stop the whole subprocess group on cancellation."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise AgentCancelled()
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", **(environment or {})}
+    process = subprocess.Popen(
+        command, cwd=_process_cwd(), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", env=env,
+        start_new_session=os.name == "posix",
+    )
+    with PROCESS_LOCK:
+        ACTIVE_PROCESSES.add(process)
+    stdout, stderr = [], []
+
+    def read_stream(stream, lines):
+        for line in stream:
+            lines.append(line)
+            if on_progress and line.strip():
+                on_progress(line.rstrip())
+        stream.close()
+
+    readers = [
+        threading.Thread(target=read_stream, args=(process.stdout, stdout), daemon=True),
+        threading.Thread(target=read_stream, args=(process.stderr, stderr), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    started = time.monotonic()
+    try:
+        while process.poll() is None:
+            if cancel_event is not None and cancel_event.is_set():
+                raise AgentCancelled()
+            if time.monotonic() - started > timeout:
+                raise subprocess.TimeoutExpired(command, timeout)
+            time.sleep(0.1)
+        if cancel_event is not None and cancel_event.is_set():
+            raise AgentCancelled()
+    except BaseException:
+        stop_local_process(process)
+        raise
+    finally:
+        for reader in readers:
+            reader.join(timeout=2)
+        with PROCESS_LOCK:
+            ACTIVE_PROCESSES.discard(process)
+    return subprocess.CompletedProcess(command, process.returncode, "".join(stdout), "".join(stderr))
+
+
+def run_action(action: str, args: dict[str, Any], apply: bool, *, cancel_event=None, on_progress=None, environment=None) -> dict[str, Any]:
     if action == "search":
-        result = run_search(str(args.get("query", "")), args.get("limit", 10))
+        result = run_search(str(args.get("query", "")), args.get("limit", 10), cancel_event=cancel_event)
         return {"ok": True, "code": 0, "data": result, "output": f"找到 {len(result.get('tracks') or [])} 首歌曲。", "read_only": True}
     if action in {"bili_download", "bili_copy"} and not apply:
         if action == "bili_download":
@@ -513,22 +440,15 @@ def run_action(action: str, args: dict[str, Any], apply: bool) -> dict[str, Any]
         return {"ok": True, "code": 0, "output": "\n".join(output), "read_only": False}
     if action in {"bili_list", "bili_fetch"}:
         command = action_command(action, args, apply=False)
-        process = subprocess.run(
-            command, cwd=_process_cwd(), capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=600,
+        process = run_local_process(
+            command, timeout=600, cancel_event=cancel_event, on_progress=on_progress, environment=environment,
         )
         output = "\n".join(part.strip() for part in (process.stdout, process.stderr) if part.strip())
         return {"ok": process.returncode == 0, "code": process.returncode, "output": output[-30000:] or "查询完成。", "read_only": True}
     command = action_command(action, args, apply)
     timeout = 3600 if action == "bili_download" else 900 if action in {"download", "convert"} else 300
-    process = subprocess.run(
-        command,
-        cwd=_process_cwd(),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
+    process = run_local_process(
+        command, timeout=timeout, cancel_event=cancel_event, on_progress=on_progress, environment=environment,
     )
     output = "\n".join(part.strip() for part in (process.stdout, process.stderr) if part.strip())
     return {
@@ -555,6 +475,156 @@ def normalize_bvids(value: Any) -> list[str]:
     if len(result) > 200:
         raise ValueError("一次最多处理 200 个视频")
     return result
+
+
+def agent_environment(settings: dict[str, str]) -> dict[str, Any]:
+    library = Path(settings["library_dir"]).expanduser()
+    cookie_path = settings.get("bilibili_cookies", "")
+    devices = []
+    volumes = Path("/Volumes")
+    if volumes.is_dir():
+        for path in sorted(volumes.iterdir()):
+            if path.is_dir() and path.resolve() != Path("/"):
+                usage = shutil.disk_usage(path)
+                devices.append({"name": path.name, "path": str(path), "writable": os.access(path, os.W_OK),
+                                "total_bytes": usage.total, "free_bytes": usage.free})
+    return {
+        "ok": True, "library_dir": str(library),
+        "download_staging": str(library / "Incoming"),
+        "bilibili_staging": str(library / "Bilibili-Staging"),
+        "bilibili_cookies": cookie_path,
+        "cookie_file_exists": bool(cookie_path and Path(cookie_path).expanduser().is_file()),
+        "locations": {"music": str(Path.home() / "Music"), "downloads": str(Path.home() / "Downloads")},
+        "devices": devices,
+        "library_free_bytes": shutil.disk_usage(library if library.exists() else Path.home()).free,
+        "tools": {name: bool(shutil.which(name)) for name in ("neteasecli", "yt-dlp", "ffmpeg", "ffprobe", "ncmdump", "node")},
+    }
+
+
+def run_agent_tool(name, args, settings, context, cancel_event, on_progress) -> dict[str, Any]:
+    if cancel_event.is_set():
+        raise AgentCancelled()
+    args = dict(args)
+    for field in ("path", "source", "root", "output_dir", "dest", "target", "cookies"):
+        if field in args and isinstance(args[field], str):
+            args[field] = args[field].strip()
+            if not args[field]:
+                del args[field]
+            elif not Path(args[field]).expanduser().is_absolute():
+                raise ValueError(f"{field} 必须是本机绝对路径或 ~/ 路径，不能把描述当成文件路径")
+    library = Path(settings["library_dir"]).expanduser()
+    staging = library / "Bilibili-Staging"
+    if name == "environment":
+        return agent_environment(settings)
+    if name == "list_files":
+        path = Path(args.get("path") or library).expanduser().resolve()
+        ensure_volume_mounted(path)
+        if not path.exists():
+            return {"ok": True, "path": str(path), "exists": False, "entries": []}
+        candidates = [path] if path.is_file() else sorted(
+            (entry for entry in path.iterdir() if not entry.name.startswith(".")),
+            key=lambda entry: (not entry.is_dir(), entry.name.casefold()),
+        )
+        offset, limit = args.get("offset", 0), args.get("limit", 100)
+        entries = []
+        for entry in candidates[offset:offset + limit]:
+            try:
+                entries.append({"name": entry.name, "path": str(entry), "kind": "directory" if entry.is_dir() else "file",
+                                "size": entry.stat().st_size if entry.is_file() else None, "suffix": entry.suffix.lower()})
+                context["bvids"].update(re.findall(r"BV[A-Za-z0-9]+", entry.name))
+            except OSError:
+                continue
+        return {"ok": True, "path": str(path), "exists": True, "total": len(candidates), "entries": entries,
+                "next_offset": offset + limit if offset + limit < len(candidates) else None}
+    if name == "download":
+        ids = args.get("track_ids", [])
+        supplied_ids = set(re.findall(r"(?<!\d)\d{4,}(?!\d)", context["user_text"]))
+        supplied_ids.update(re.findall(r"(?:\bid\s*[:：=]?\s*|song\?id=)(\d+)", context["user_text"], flags=re.I))
+        if any(str(track_id) not in context["track_ids"] | supplied_ids for track_id in ids):
+            raise ValueError("歌曲 ID 必须来自真实搜索结果或用户提供的信息；请先搜索")
+    if name in {"bili_fetch", "bili_download"}:
+        bvids = normalize_bvids(args.get("bvids"))
+        supplied = set(re.findall(r"BV[A-Za-z0-9]+", context["user_text"]))
+        if not set(bvids).issubset(context["bvids"] | supplied):
+            raise ValueError("BV 号必须来自用户文字、文件名或投稿查询；请先查询")
+        args["bvids"] = bvids
+    if name == "bili_list":
+        if str(args["uid"]) not in re.findall(r"(?<!\d)\d+(?!\d)", context["user_text"]):
+            raise ValueError("UP 主 UID 必须由用户提供，不能猜测")
+        cached = context.get("bili_lists", {}).get((args["uid"], args.get("cookies") or settings.get("bilibili_cookies", "")))
+        if cached is not None:
+            offset, limit = args.get("offset", 0), args.get("limit", 100)
+            videos = cached[offset:offset + limit]
+            context["bvids"].update(video["bvid"] for video in videos if video.get("bvid"))
+            return {"ok": True, "data": {"videos": videos, "total": len(cached),
+                    "next_offset": offset + limit if offset + limit < len(cached) else None},
+                    "output": f"投稿 {len(cached)} 条，当前返回第 {offset + 1} 至 {offset + len(videos)} 条。"}
+    if name in {"download", "convert", "album"}:
+        args.setdefault("output_dir", str(library))
+        ensure_volume_mounted(Path(args["output_dir"]).expanduser())
+    if name == "repair":
+        args.setdefault("root", str(library))
+    if name == "bili_download":
+        args.setdefault("output_dir", str(staging))
+    if name in {"bili_rename", "bili_copy"}:
+        args.setdefault("source", str(staging))
+    if name == "bili_copy":
+        args.setdefault("dest", str(library))
+    if name.startswith("bili_"):
+        args.setdefault("cookies", settings.get("bilibili_cookies", ""))
+    for field in ("source", "root"):
+        if args.get(field):
+            source = Path(args[field]).expanduser().resolve()
+            ensure_volume_mounted(source)
+            if not source.exists():
+                raise ValueError(f"来源路径不存在：{source}")
+    if name == "album":
+        source = Path(args["source"]).expanduser().resolve()
+        if source in {Path("/"), Path.home(), Path.home() / "Music", Path.home() / "Downloads", library.resolve(), Path("/Volumes")}:
+            raise ValueError("专辑归档需要具体的音乐暂存目录。请把本次歌曲下载到独立目录后再归档，避免搬走整个曲库")
+    if name in {"fill_lyrics", "embed_cover"}:
+        target = Path(args.get("target") or library).expanduser().resolve()
+        ensure_volume_mounted(target)
+        if not target.exists():
+            raise ValueError(f"音乐路径不存在：{target}")
+        command = _python_script_command(PROJECT_ROOT / "tools" / f"{name}.py", str(target))
+        if args.get("recursive", True):
+            command.append("--recursive")
+        process = run_local_process(command, timeout=3600, cancel_event=cancel_event, on_progress=on_progress)
+        output = "\n".join(part.strip() for part in (process.stdout, process.stderr) if part.strip())
+        return {"ok": process.returncode == 0, "code": process.returncode, "output": output[-20000:]}
+    environment = {
+        "OPENAI_API_KEY": settings["api_key"], "OPENAI_BASE_URL": settings["api_base_url"],
+    }
+    args["_translation_model"] = settings["model"]
+    with tempfile.TemporaryDirectory(prefix="walkman-agent-") as directory:
+        result_path = Path(directory) / "result.json"
+        if name in {"bili_list", "bili_fetch"}:
+            args["_result_path"] = str(result_path)
+        if name == "bili_rename" and args.get("translations"):
+            translations = args["translations"]
+            if not all(re.fullmatch(r"BV[A-Za-z0-9]+", key) for key in translations):
+                raise ValueError("译名表的键必须是 BV 号")
+            translation_path = Path(directory) / "translations.json"
+            translation_path.write_text(json.dumps(translations, ensure_ascii=False), encoding="utf-8")
+            args["translations"] = str(translation_path)
+        result = run_action(name, args, apply=True, cancel_event=cancel_event, on_progress=on_progress, environment=environment)
+        if name == "search" and result.get("ok"):
+            context["track_ids"].update(str(track["id"]) for track in result.get("data", {}).get("tracks", []) if "id" in track)
+        if name in {"bili_list", "bili_fetch"} and result_path.is_file():
+            videos = json.loads(result_path.read_text(encoding="utf-8"))
+            offset, limit = (args.get("offset", 0), args.get("limit", 100)) if name == "bili_list" else (0, 200)
+            selected = videos[offset:offset + limit]
+            result["data"] = {"videos": selected, "total": len(videos),
+                              "next_offset": offset + limit if offset + limit < len(videos) else None}
+            context["bvids"].update(video["bvid"] for video in selected if video.get("bvid") and video.get("title") != "__FAILED__")
+            if name == "bili_list" and result["ok"]:
+                context.setdefault("bili_lists", {})[(args["uid"], args.get("cookies", ""))] = videos
+            result["output"] = f"已查询 {len(videos)} 个视频。" + (result["output"][-3000:] if not result["ok"] else "")
+        return result
+
+
+AGENT = AgentManager(load_settings, call_chat_message, run_agent_tool)
 
 
 class WalkmanHandler(BaseHTTPRequestHandler):
@@ -609,6 +679,20 @@ class WalkmanHandler(BaseHTTPRequestHandler):
         )
 
     def do_GET(self) -> None:
+        request_url = urlsplit(self.path)
+        if request_url.path.startswith("/api/ai/jobs/"):
+            if not self._is_local_request():
+                self._error("仅允许本机页面访问此服务", 403)
+                return
+            try:
+                after = int(parse_qs(request_url.query).get("after", ["0"])[0])
+                self._json({"ok": True, "job": AGENT.snapshot(request_url.path.rsplit("/", 1)[-1], after=max(0, after))})
+            except ValueError as exc:
+                self._error(str(exc), 404)
+            return
+        if self.path == "/api/ai/tools":
+            self._json({"ok": True, "tools": [{"name": name, "label": label} for name, label, *_ in TOOL_SPECS if name != "ask_user"]})
+            return
         if self.path == "/api/health":
             settings = load_settings()
             self._json(
@@ -632,6 +716,7 @@ class WalkmanHandler(BaseHTTPRequestHandler):
             "/index.html": WEB_ROOT / "index.html",
             "/styles.css": WEB_ROOT / "styles.css",
             "/app.js": WEB_ROOT / "app.js",
+            "/agent.js": WEB_ROOT / "agent.js",
         }
         path = paths.get(self.path)
         if path is None or not path.is_file():
@@ -654,12 +739,21 @@ class WalkmanHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             if self.path == "/api/settings":
                 self._save_settings(payload)
-            elif self.path == "/api/ai/plan":
+            elif self.path == "/api/ai/run":
                 prompt = _as_text(payload.get("prompt"), limit=8000)
+                session_id = payload.get("session_id")
                 if not prompt:
                     raise ValueError("先写下你想完成的音乐任务")
-                plan = build_plan(prompt, load_settings())
-                self._json({"ok": True, "plan": plan})
+                if session_id is not None and not isinstance(session_id, str):
+                    raise ValueError("会话参数无效")
+                if not public_settings(load_settings())["ai_configured"]:
+                    raise ValueError("请先在设置中连接 AI 服务")
+                self._json({"ok": True, "job": AGENT.start(prompt, session_id)}, 202)
+            elif self.path == "/api/ai/cancel":
+                job_id = payload.get("job_id")
+                if not isinstance(job_id, str):
+                    raise ValueError("任务参数无效")
+                self._json({"ok": True, "job": AGENT.cancel(job_id)})
             elif self.path == "/api/ai/test":
                 settings = load_settings()
                 if "api_base_url" in payload:
@@ -674,14 +768,18 @@ class WalkmanHandler(BaseHTTPRequestHandler):
                         settings["api_key"] = ""
                     elif api_key.strip():
                         settings["api_key"] = api_key.strip()
-                content = call_chat_api(
+                message = call_chat_message(
                     settings,
                     [
                         {"role": "system", "content": "You are a connection check. Reply with exactly: OK"},
                         {"role": "user", "content": "Reply OK."},
                     ],
                     timeout=30,
+                    tools=TOOLS[:1],
                 )
+                content = message.get("content") or ("OK" if message.get("tool_calls") else "")
+                if not isinstance(content, str) or not content.strip():
+                    raise RuntimeError("AI 服务返回了空响应")
                 self._json({"ok": True, "message": content[:100]})
             elif self.path == "/api/search":
                 result = run_search(_as_text(payload.get("query"), limit=300), payload.get("limit", 20))
@@ -717,6 +815,16 @@ class WalkmanHandler(BaseHTTPRequestHandler):
         current["api_base_url"] = validate_base_url(base_url)
         current["model"] = model
         current["library_dir"] = library_dir
+        if not Path(library_dir).expanduser().is_absolute():
+            raise ValueError("默认音乐文件夹必须是绝对路径或 ~/ 路径")
+        current["library_dir"] = str(Path(library_dir).expanduser())
+        if "bilibili_cookies" in payload:
+            current["bilibili_cookies"] = _as_text(payload.get("bilibili_cookies"), limit=4096)
+            if current["bilibili_cookies"]:
+                cookie_path = Path(current["bilibili_cookies"]).expanduser()
+                if not cookie_path.is_absolute():
+                    raise ValueError("Cookie 文件必须是绝对路径或 ~/ 路径")
+                current["bilibili_cookies"] = str(cookie_path)
         if payload.get("clear_api_key") is True:
             current["api_key"] = ""
         elif new_key.strip():
@@ -765,6 +873,10 @@ def main() -> int:
         temporary = args.ready_file.with_name(f".{args.ready_file.name}.tmp")
         temporary.write_text(url, encoding="utf-8")
         temporary.replace(args.ready_file)
+    def stop_server(signum, frame):
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, stop_server)
     if sys.stdout is not None:
         print(f"Walkman Music Manager 已启动：{url}")
         print("按 Ctrl+C 停止。")
@@ -774,6 +886,11 @@ def main() -> int:
         if sys.stdout is not None:
             print("\n服务已停止。")
     finally:
+        AGENT.cancel_all()
+        with PROCESS_LOCK:
+            active = list(ACTIVE_PROCESSES)
+        for process in active:
+            stop_local_process(process)
         server.server_close()
     return 0
 

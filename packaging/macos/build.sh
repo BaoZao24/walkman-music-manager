@@ -36,6 +36,9 @@ DATA_ARGS=()
 for source in "$ROOT"/*.py; do
   DATA_ARGS+=(--add-data "$source:.")
 done
+for source in "$ROOT/tools"/*.py; do
+  DATA_ARGS+=(--add-data "$source:tools")
+done
 
 "$BUILD_PYTHON" -m PyInstaller \
   --noconfirm --clean --onefile --console \

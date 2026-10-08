@@ -4,7 +4,7 @@
 
 **An automated music download & library workflow for Sony Walkman storage cards**: fetch tracks and covers from NetEase Cloud Music and Bilibili, repair lyrics into Walkman-compatible LRC, embed album / video covers, and archive your library by date, artist, or album.
 
-所有写入类操作默认提供预览（`--dry-run`）与备份，避免误操作。
+CLI 提供 `--dry-run` 预览；AI 客户端按用户的明确任务直接执行，保留歌词备份、已有文件跳过和存储卡挂载检查。
 
 ## 功能特性
 
@@ -95,7 +95,7 @@ python3 web_app.py
 
 打开终端提示的 `http://127.0.0.1:8765`，在 **AI 与 API** 页面填写 OpenAI 兼容服务的 API 地址、模型名称和 API Key。密钥保存在用户目录下的 `~/.config/walkman-music-manager/settings.json`，仅当前用户可读；页面不会接收已保存的密钥。也可配置无 Key 的本机兼容服务。
 
-前端可用 AI 规划网易云与 Bilibili 工作流、搜索并下载歌曲、管理翻唱投稿、转换 `.ncm`、修复歌词和归档专辑。写入或下载操作都需要先查看预览，再点击确认执行。默认音乐目录为 `~/Music/Walkman`，可在设置页修改。
+默认界面是 AI 音乐助手：一句话描述目标，AI 会连续调用工具，自动完成搜索选歌、下载、Bilibili 投稿筛选与翻唱整理、NCM 转换、歌词修复、补歌词、补封面和专辑归档。无需跳转表单逐步确认，执行进度和实际工具输出会显示在同一段对话中；可以停止任务，也可以回答追问后继续。手动工具保留在折叠入口中。默认音乐目录为 `~/Music/Walkman`，设置页可修改目录和 Bilibili Cookie 文件路径。AI 模型及 API 需要支持 OpenAI 兼容的工具调用。
 
 ### macOS App
 

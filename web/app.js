@@ -10,7 +10,7 @@ const state = {
 };
 
 const pageNames = {
-  home: '工作台',
+  home: '音乐助手',
   search: '搜索与下载',
   bilibili: 'Bilibili 翻唱',
   library: '曲库整理',
@@ -35,7 +35,11 @@ async function request(path, body) {
   } catch {
     throw new Error(`服务返回了无法读取的响应（HTTP ${response.status}）`);
   }
-  if (!response.ok || data.ok === false) throw new Error(data.error || data.output || `请求失败（HTTP ${response.status}）`);
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || data.output || `请求失败（HTTP ${response.status}）`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -131,6 +135,7 @@ function fillSettings(settings) {
   if (biliCookies && !biliCookies.value) biliCookies.value = 'www.bilibili.com_cookies.txt';
   $('#clear-key-row').classList.toggle('hidden', !settings.api_key_configured);
   $('#setting-api-key').value = '';
+  $('#setting-bilibili-cookies').value = settings.bilibili_cookies || '';
   $('#setting-api-key').disabled = false;
   $('#setting-api-key').placeholder = settings.api_key_configured ? '已保存 · 留空则保持不变' : '粘贴你的 API Key';
   $('#key-hint').textContent = settings.api_key_configured
@@ -148,108 +153,6 @@ async function loadAppState() {
     toast(error.message, 'error');
   }
 }
-
-function renderPlan(plan) {
-  const box = $('#plan-result');
-  const labels = { search: '搜索歌曲', download: '下载歌曲', convert: '转换 NCM', repair: '修复歌词', album: '专辑归档', bili_list: '列出 UP 主投稿', bili_fetch: '查询 BV 信息', bili_download: '下载翻唱', bili_rename: '重命名翻唱', bili_copy: '复制翻唱入库', none: '还需要一点信息' };
-  const icons = { search: 'i-search', download: 'i-music', convert: 'i-convert', repair: 'i-music', album: 'i-folder', bili_list: 'i-video', bili_fetch: 'i-search', bili_download: 'i-music', bili_rename: 'i-sliders', bili_copy: 'i-folder', none: 'i-spark' };
-  const classNames = { search: 'quick-icon-lime', download: 'quick-icon-lime', convert: 'tool-purple', repair: 'tool-blue', album: 'tool-amber', bili_list: 'tool-blue', bili_fetch: 'tool-purple', bili_download: 'tool-amber', bili_rename: 'tool-purple', bili_copy: 'tool-blue', none: 'quick-icon-lime' };
-  const questions = plan.questions?.length
-    ? `<ul class="plan-questions">${plan.questions.map((question) => `<li>${escapeHtml(question)}</li>`).join('')}</ul>`
-    : '';
-  let buttonText = '填入整理工具并预览';
-  if (plan.action === 'search') buttonText = '打开搜索结果';
-  if (plan.action === 'download' && !plan.args?.track_ids?.length) buttonText = plan.args?.query ? '先搜索并选择歌曲' : '前往搜索歌曲';
-  const showAction = plan.action !== 'none';
-  box.innerHTML = `
-    <div class="plan-result-header"><div class="plan-result-title"><span class="tool-icon ${classNames[plan.action] || 'quick-icon-lime'}"><svg class="icon"><use href="#${icons[plan.action] || 'i-spark'}"></use></svg></span><div><h3>${escapeHtml(labels[plan.action] || 'AI 任务计划')}</h3><p>AI 已把自然语言整理成可操作的步骤</p></div></div><span class="ai-model-chip">预览模式</span></div>
-    <p>${escapeHtml(plan.summary)}</p>${questions}
-    <div class="plan-result-actions"><small>本机任务 · 不会自动开始写入或下载</small>${showAction ? `<button class="button button-outline" type="button" id="apply-plan"><span>${escapeHtml(buttonText)}</span><svg class="icon"><use href="#i-arrow"></use></svg></button>` : ''}</div>`;
-  box.classList.remove('hidden');
-  box.dataset.plan = JSON.stringify(plan);
-  $('#apply-plan')?.addEventListener('click', () => applyPlan(plan));
-  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function applyPlan(plan) {
-  const args = plan.args || {};
-  if (plan.action === 'search') {
-    navigate('search');
-    $('#search-query').value = args.query || '';
-    if (args.query) $('#search-form').requestSubmit();
-    else $('#search-query').focus();
-    return;
-  }
-  if (plan.action === 'download') {
-    if (args.track_ids?.length) {
-      for (const id of args.track_ids) {
-        const key = String(id);
-        if (!state.selected.has(key)) state.selected.set(key, { id: key, name: `歌曲 ID ${key}`, artists: [], album: '', durationFormatted: '—' });
-      }
-      updateDownloadPanel();
-      navigate('search');
-      toast('歌曲 ID 已放入下载清单，请先预览下载计划。');
-    } else {
-      navigate('search');
-      $('#search-query').value = args.query || '';
-      if (args.query) $('#search-form').requestSubmit();
-      else $('#search-query').focus();
-    }
-    return;
-  }
-  if (['convert', 'repair', 'album'].includes(plan.action)) {
-    navigate('library');
-    setLibraryTool(plan.action);
-    const form = $(`.operation-form[data-action="${plan.action}"]`);
-    for (const [key, value] of Object.entries(args)) {
-      const field = form.elements.namedItem(key);
-      if (!field) continue;
-      if (field.type === 'checkbox') field.checked = value === true;
-      else if (Array.isArray(value)) field.value = value.join('\n');
-      else if (typeof value === 'string' || typeof value === 'number') field.value = value;
-    }
-    const requiredFieldsFilled = [...form.querySelectorAll('[required]')].every((field) => field.value.trim());
-    if (requiredFieldsFilled && !plan.questions?.length) form.requestSubmit();
-    else form.querySelector('[required]:invalid')?.focus();
-    return;
-  }
-  if (plan.action.startsWith('bili_')) {
-    navigate('bilibili');
-    const tabs = { bili_list: 'list', bili_fetch: 'fetch', bili_download: 'download', bili_rename: 'organize', bili_copy: 'organize' };
-    setBiliTool(tabs[plan.action]);
-    const form = $(`.operation-form[data-action="${plan.action}"]`);
-    for (const [key, value] of Object.entries(args)) {
-      const field = form?.elements.namedItem(key);
-      if (!field) continue;
-      if (field.type === 'checkbox') field.checked = value === true;
-      else if (Array.isArray(value)) field.value = value.join('\n');
-      else if (typeof value === 'string' || typeof value === 'number') field.value = value;
-    }
-    const requiredFieldsFilled = [...(form?.querySelectorAll('[required]') || [])].every((field) => field.value.trim());
-    if (form && requiredFieldsFilled && !plan.questions?.length) form.requestSubmit();
-    else form?.querySelector('[required]:invalid')?.focus();
-  }
-}
-
-$('#ai-prompt-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const prompt = $('#ai-prompt').value.trim();
-  if (!prompt) return toast('先描述你想完成的音乐任务。', 'error');
-  const button = $('button[type="submit"]', event.currentTarget);
-  if (state.settings && !state.settings.ai_configured) {
-    navigate('settings');
-    return toast('请先保存 AI API Key；本机兼容服务可不填写 Key。', 'error');
-  }
-  setButtonBusy(button, true, 'AI 正在整理…');
-  try {
-    const result = await request('/api/ai/plan', { prompt });
-    renderPlan(result.plan);
-  } catch (error) {
-    toast(error.message, 'error');
-  } finally {
-    setButtonBusy(button, false);
-  }
-});
 
 async function performSearch(query, limit = 20) {
   const summary = $('#search-summary');
@@ -410,6 +313,7 @@ $('#settings-form').addEventListener('submit', async (event) => {
     api_key: $('#setting-api-key').value,
     clear_api_key: $('#clear-api-key').checked,
     library_dir: $('#setting-library-dir').value.trim(),
+    bilibili_cookies: $('#setting-bilibili-cookies').value.trim(),
   };
   setButtonBusy(button, true, '正在保存…');
   try {
