@@ -41,6 +41,7 @@ final class WalkmanAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDel
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
+        appMenuItem.title = "Walkman Music Manager"
         appMenu.addItem(
             withTitle: "退出 Walkman Music Manager",
             action: #selector(NSApplication.terminate(_:)),
@@ -48,6 +49,21 @@ final class WalkmanAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDel
         )
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
+
+        let editMenuItem = NSMenuItem()
+        let editMenu = NSMenu(title: "编辑")
+        editMenu.addItem(NSMenuItem(title: "撤销", action: NSSelectorFromString("undo:"), keyEquivalent: "z"))
+        let redoItem = NSMenuItem(title: "重做", action: NSSelectorFromString("redo:"), keyEquivalent: "z")
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redoItem)
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: "剪切", action: NSSelectorFromString("cut:"), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "复制", action: NSSelectorFromString("copy:"), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "粘贴", action: NSSelectorFromString("paste:"), keyEquivalent: "v"))
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: "全选", action: NSSelectorFromString("selectAll:"), keyEquivalent: "a"))
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
         NSApplication.shared.mainMenu = mainMenu
     }
 
