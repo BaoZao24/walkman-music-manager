@@ -6,6 +6,7 @@ __pycache__/
 venv/
 dist/
 build/
+release/
 *.egg-info/
 # 敏感文件：bilibili 登录 cookie、API 密钥
 *cookies*.txt

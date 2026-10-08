@@ -103,10 +103,10 @@ python3 web_app.py
 
 ```bash
 bash packaging/macos/build.sh
-open "$HOME/Applications/Walkman Music Manager.app"
+open "release/Walkman Music Manager.app"
 ```
 
-首次构建会在 `.venv-build` 中安装 PyInstaller。应用保存在 `~/Applications`，以避免云同步目录给 app bundle 添加会破坏代码签名的文件属性；也可通过 `APP_DEST` 指定其它保存位置。应用会启动本机服务并打开默认浏览器；Python 运行环境已打包。音乐下载和转换依赖的 `neteasecli`、`yt-dlp`、`ffmpeg`、`ncmdump` 仍需安装在本机，应用会从标准 Homebrew 路径和 `PATH` 中查找。
+首次构建会在 `.venv-build` 中安装 PyInstaller。签名后的应用本体保存在 `~/WalkmanBuilds`，项目的 `release` 文件夹中有一个可双击启动的入口；这样可避免云同步目录给 app bundle 添加破坏代码签名的文件属性。也可通过 `APP_DEST` 指定应用本体保存位置。应用会启动本机服务并打开默认浏览器；Python 运行环境已打包。音乐下载和转换依赖的 `neteasecli`、`yt-dlp`、`ffmpeg`、`ncmdump` 仍需安装在本机，应用会从标准 Homebrew 路径和 `PATH` 中查找。
 
 把 `/Volumes/WALKMAN` 替换为你的存储卡挂载路径：
 

@@ -746,7 +746,13 @@ def main() -> int:
     args = parser.parse_args()
     if args.host not in {"127.0.0.1", "localhost", "::1"}:
         parser.error("为保护本机 API 配置，只允许绑定到 loopback 地址")
-    server = ThreadingHTTPServer((args.host, args.port), WalkmanHandler)
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), WalkmanHandler)
+    except OSError:
+        if not getattr(sys, "frozen", False) or args.port == 0:
+            raise
+        # A terminal-launched development server may already use the default port.
+        server = ThreadingHTTPServer((args.host, 0), WalkmanHandler)
     display_host = "localhost" if args.host in {"localhost", "::1"} else "127.0.0.1"
     url = f"http://{display_host}:{server.server_port}"
     if sys.stdout is not None:

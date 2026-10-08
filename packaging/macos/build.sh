@@ -3,7 +3,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_NAME="Walkman Music Manager"
-APP_PATH="${APP_DEST:-$HOME/Applications/$APP_NAME.app}"
+APP_PATH="${APP_DEST:-$HOME/WalkmanBuilds/$APP_NAME.app}"
+RELEASE_LINK="$ROOT/release/$APP_NAME.app"
 BUILD_ROOT="$ROOT/build/macos"
 BUILD_VENV="$ROOT/.venv-build"
 BUILD_PYTHON="$BUILD_VENV/bin/python"
@@ -18,7 +19,7 @@ if [[ ! -x "$BUILD_PYTHON" ]]; then
 fi
 "$BUILD_PYTHON" -m pip install --disable-pip-version-check -r "$ROOT/packaging/macos/requirements.txt"
 
-mkdir -p "$BUILD_ROOT" "$(dirname "$APP_PATH")"
+mkdir -p "$BUILD_ROOT" "$(dirname "$APP_PATH")" "$ROOT/release"
 swift "$ROOT/packaging/macos/make_icon.swift" "$BUILD_ROOT/WalkmanIcon.png"
 ICONSET="$BUILD_ROOT/Walkman.iconset"
 mkdir -p "$ICONSET"
@@ -62,5 +63,10 @@ chmod 755 "$APP_PATH/Contents/MacOS/WalkmanCLI"
 xattr -cr "$APP_PATH"
 codesign --force --deep --sign - "$APP_PATH"
 codesign --verify --deep --strict "$APP_PATH"
+if [[ -e "$RELEASE_LINK" && ! -L "$RELEASE_LINK" ]]; then
+  echo "Release destination already exists and is not a symlink: $RELEASE_LINK" >&2
+  exit 1
+fi
+ln -sfn "$APP_PATH" "$RELEASE_LINK"
 
-echo "Built macOS app: $APP_PATH"
+echo "Built macOS app: $RELEASE_LINK -> $APP_PATH"
