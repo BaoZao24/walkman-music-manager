@@ -743,6 +743,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Start the local Walkman Music Manager web app.")
     parser.add_argument("--host", default="127.0.0.1", help="Local bind address")
     parser.add_argument("--port", type=int, default=8765, help="Local port")
+    parser.add_argument(
+        "--ready-file",
+        type=Path,
+        help="Write the local URL here after the server has started",
+    )
     args = parser.parse_args()
     if args.host not in {"127.0.0.1", "localhost", "::1"}:
         parser.error("为保护本机 API 配置，只允许绑定到 loopback 地址")
@@ -755,13 +760,14 @@ def main() -> int:
         server = ThreadingHTTPServer((args.host, 0), WalkmanHandler)
     display_host = "localhost" if args.host in {"localhost", "::1"} else "127.0.0.1"
     url = f"http://{display_host}:{server.server_port}"
+    if args.ready_file:
+        args.ready_file.parent.mkdir(parents=True, exist_ok=True)
+        temporary = args.ready_file.with_name(f".{args.ready_file.name}.tmp")
+        temporary.write_text(url, encoding="utf-8")
+        temporary.replace(args.ready_file)
     if sys.stdout is not None:
         print(f"Walkman Music Manager 已启动：{url}")
         print("按 Ctrl+C 停止。")
-    if getattr(sys, "frozen", False):
-        import webbrowser
-
-        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
