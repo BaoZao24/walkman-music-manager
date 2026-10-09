@@ -393,6 +393,17 @@ button, .page, .tool-content, .bili-content { animation: none; }
 .agent-answer { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
 .agent-error { border-left: 2px solid var(--lime); padding-left: 12px; }
 .agent-new-hint { color: var(--faint); font-size: 12px; }
+.usage-meter { padding: 12px 20px; border-top: 1px solid var(--stroke); background: #0b0b0b; font-size: 10px; color: var(--muted); }
+.usage-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; }
+.usage-summary > span:first-child { margin-right: auto; color: var(--faint); }
+.usage-summary strong { padding-left: 5px; color: var(--lime); font-family: var(--mono); font-weight: 500; }
+.usage-details { margin-top: 8px; }
+.usage-details summary { cursor: pointer; width: fit-content; color: var(--faint); }
+.usage-details p { margin: 8px 0 0; line-height: 1.8; overflow-wrap: anywhere; }
+.usage-model { font-family: var(--mono); }
+.usage-note { color: var(--faint); line-height: 1.8; }
+.usage-warning { margin: 8px 0 0; color: var(--text); line-height: 1.8; }
+.agent-turn-usage { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--stroke); color: var(--faint); font-family: var(--mono); font-size: 10px; line-height: 1.8; }
 .agent-examples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .agent-examples button { padding: 8px 12px; border: 1px solid var(--stroke); border-radius: 3px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
 .agent-examples button:hover { border-color: var(--lime); color: var(--text); }

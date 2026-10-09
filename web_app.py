@@ -27,6 +27,7 @@ from urllib.request import Request, urlopen
 
 from download_music import ensure_volume_mounted
 from ai_agent import AgentCancelled, AgentManager, TOOL_SPECS, TOOLS
+from token_usage import current_task_id, record_usage, usage_snapshot
 
 
 PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)).resolve()
@@ -140,13 +141,18 @@ def call_chat_message(
         with urlopen(request, timeout=timeout) as response:
             result = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
+        record_usage(None, model=settings["model"], source="assistant")
         detail = exc.read(3000).decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"AI 服务返回 HTTP {exc.code}" + (f": {detail}" if detail else "")) from exc
     except (URLError, TimeoutError, OSError) as exc:
+        record_usage(None, model=settings["model"], source="assistant")
         raise RuntimeError(f"连接 AI 服务失败：{exc}") from exc
     except json.JSONDecodeError as exc:
+        record_usage(None, model=settings["model"], source="assistant")
         raise RuntimeError("AI 服务没有返回有效 JSON") from exc
 
+    response_data = result if isinstance(result, dict) else {}
+    usage = record_usage(response_data.get("usage"), model=response_data.get("model") or settings["model"], source="assistant")
     try:
         message = result["choices"][0]["message"]
     except (KeyError, IndexError, TypeError) as exc:
@@ -161,6 +167,7 @@ def call_chat_message(
             if isinstance(part, dict)
         )
     message["content"] = content
+    message["_usage"] = usage
     return message
 
 
@@ -361,7 +368,7 @@ def run_local_process(command: list[str], timeout: int, *, cancel_event=None, on
     """Capture tool output and stop the whole subprocess group on cancellation."""
     if cancel_event is not None and cancel_event.is_set():
         raise AgentCancelled()
-    env = {**os.environ, "PYTHONUNBUFFERED": "1", **(environment or {})}
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "WALKMAN_USAGE_TASK_ID": current_task_id(), **(environment or {})}
     process = subprocess.Popen(
         command, cwd=_process_cwd(), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace", env=env,
@@ -680,6 +687,12 @@ class WalkmanHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         request_url = urlsplit(self.path)
+        if request_url.path == "/api/usage":
+            if not self._is_local_request():
+                self._error("仅允许本机页面访问此服务", 403)
+                return
+            self._json({"ok": True, "usage": usage_snapshot()})
+            return
         if request_url.path.startswith("/api/ai/jobs/"):
             if not self._is_local_request():
                 self._error("仅允许本机页面访问此服务", 403)

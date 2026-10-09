@@ -8,6 +8,8 @@ RELEASE_LINK="$ROOT/release/$APP_NAME.app"
 BUILD_ROOT="$ROOT/build/macos"
 BUILD_VENV="$ROOT/.venv-build"
 BUILD_PYTHON="$BUILD_VENV/bin/python"
+APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/packaging/macos/Info.plist")"
+RELEASE_ZIP="$ROOT/release/Walkman-Music-Manager-$APP_VERSION-macos-$(uname -m).zip"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This build script creates a macOS app and must run on macOS." >&2
@@ -53,6 +55,9 @@ done
 "$BUILD_PYTHON" -m PyInstaller \
   --noconfirm --clean --onefile --console \
   --name WalkmanCLI \
+  --paths "$ROOT" --paths "$ROOT/tools" \
+  --hidden-import walkman --hidden-import search_music \
+  --hidden-import fill_lyrics --hidden-import embed_cover \
   --distpath "$BUILD_ROOT/cli-dist" \
   --workpath "$BUILD_ROOT/cli-work" \
   --specpath "$BUILD_ROOT/cli-spec" \
@@ -89,4 +94,11 @@ if [[ -e "$RELEASE_LINK" && ! -L "$RELEASE_LINK" ]]; then
 fi
 ln -sfn "$APP_PATH" "$RELEASE_LINK"
 
+ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$RELEASE_ZIP"
+(
+  cd "$ROOT/release"
+  shasum -a 256 "$(basename "$RELEASE_ZIP")" > "$(basename "$RELEASE_ZIP").sha256"
+)
+
 echo "Built native macOS app: $RELEASE_LINK -> $APP_PATH"
+echo "Release archive: $RELEASE_ZIP"

@@ -99,6 +99,12 @@ python3 web_app.py
 
 ### macOS App
 
+#### v1.1.0 · Token 使用计量
+
+每次任务显示输入、输出、总 token 与 API 请求次数；主界面可查看今日、累计和按模型的用量明细。工具执行期间的歌词翻译与 API 连接检查也计入累计。用量按服务返回的 `usage` 记录，缓存和推理 token 作为明细展示，不重复加入总量；未返回用量、网络失败或仅返回部分用量的请求会单独标明。统计从升级此版本开始，保存在 `~/.config/walkman-music-manager/token-usage.json`，重启后保留；不保存任务文本、歌词或密钥。
+
+GitHub Release 提供 `Walkman-Music-Manager-1.1.0-macos-arm64.zip`，解压后可直接运行 `.app`，适用于 Apple 芯片 Mac。应用采用本地签名，尚未经过 Apple 公证。
+
 在 macOS 上构建可双击启动的桌面客户端（需要 Xcode Command Line Tools 提供的 Swift、`sips` 和 `codesign`）：
 
 ```bash

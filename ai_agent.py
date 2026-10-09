@@ -8,6 +8,7 @@ import threading
 import uuid
 from datetime import date
 from typing import Any, Callable
+from token_usage import TASK_ID, usage_snapshot, usage_task
 
 
 def text_property(description: str) -> dict[str, Any]:
@@ -213,7 +214,11 @@ class AgentManager:
                     job["cancel"].set()
 
     def _public(self, job: dict[str, Any]) -> dict[str, Any]:
-        return copy.deepcopy({key: job[key] for key in ("id", "session_id", "status", "events", "result", "error")})
+        result = copy.deepcopy({key: job[key] for key in ("id", "session_id", "status", "events", "result", "error")})
+        usage = usage_snapshot(job["id"])
+        result["usage"] = usage["task"]
+        result["usage_totals"] = {key: usage[key] for key in ("total", "today", "models", "sources", "since", "storage_error")}
+        return result
 
     def _event(self, job: dict[str, Any], kind: str, **data: Any) -> None:
         secret = job["secret"]
@@ -249,6 +254,7 @@ class AgentManager:
                 del self.sessions[session_id]
 
     def _run(self, job: dict[str, Any], session: dict[str, Any], prompt: str, settings: dict[str, str]) -> None:
+        usage_token = TASK_ID.set(job["id"])
         messages = session["messages"]
         if not messages:
             messages.append({"role": "system", "content": system_prompt(settings)})
@@ -360,6 +366,7 @@ class AgentManager:
         except Exception as exc:
             self._finish(job, "failed", error=str(exc))
         finally:
+            TASK_ID.reset(usage_token)
             with self.lock:
                 if session.get("active_job") == job["id"]:
                     session["busy"] = False
@@ -381,7 +388,8 @@ class AgentManager:
 
         def request():
             try:
-                outcome["message"] = self.chat(settings, history, tools=TOOLS, timeout=90)
+                with usage_task(job["id"]):
+                    outcome["message"] = self.chat(settings, history, tools=TOOLS, timeout=90)
             except Exception as exc:
                 outcome["error"] = exc
             finally:

@@ -90,6 +90,11 @@
                 <textarea id="ai-prompt" rows="2" placeholder="帮我找宇多田光的 First Love 原版，下载到默认音乐目录，并补齐歌词和封面" aria-label="告诉 AI 你想完成的任务"></textarea>
                 <div class="prompt-bottom"><span class="prompt-hint">Enter 发送 · Shift + Enter 换行</span><div class="agent-controls"><button class="button button-outline hidden" id="cancel-task" type="button">停止</button><button class="button button-primary" type="submit"><svg class="icon"><use href="#i-arrow"/></svg><span>开始执行</span></button></div></div>
               </form>
+              <div class="usage-meter" aria-label="Token 使用计量">
+                <div class="usage-summary"><span>Token 用量</span><span>今日 <strong id="usage-today">—</strong></span><span>累计 <strong id="usage-total">—</strong></span></div>
+                <details class="usage-details"><summary>用量明细</summary><div id="usage-breakdown">正在读取用量…</div><p class="usage-note">按 API 返回的用量记录，含工具调用与歌词翻译；缓存和推理 token 已包含在输入或输出中。统计从此版本开始，仅包含本客户端的调用。</p></details>
+                <p class="usage-warning hidden" id="usage-warning"></p>
+              </div>
             </div>
             <div class="agent-examples" aria-label="试试这些任务">
               <button type="button" data-prompt="帮我搜索宇多田光的 First Love 原版，下载到默认音乐目录。">找一首歌并下载</button>

@@ -18,6 +18,7 @@ import re
 import urllib.error
 import urllib.request
 from typing import Any
+from token_usage import record_usage
 
 
 JAPANESE_RE = re.compile(r"[\u3040-\u30ff\u31f0-\u31ff]")
@@ -119,10 +120,13 @@ def translate_lines(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        record_usage(None, model=model, source="lyrics")
         detail = getattr(exc, "reason", str(exc))
         raise TranslationError(f"translation request failed: {detail}") from exc
     if not isinstance(payload, dict):
+        record_usage(None, model=model, source="lyrics")
         raise TranslationError("model returned an unexpected response")
+    record_usage(payload.get("usage"), model=payload.get("model") or model, source="lyrics")
     return _parse_array(_response_text(payload), len(lines))
 
 

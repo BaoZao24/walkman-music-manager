@@ -5,6 +5,49 @@ const agentForm = $('#ai-prompt-form');
 const agentInput = $('#ai-prompt');
 const agentSubmit = $('button[type="submit"]', agentForm);
 const agentCancel = $('#cancel-task');
+const tokenNumber = (value) => Number(value || 0).toLocaleString('zh-CN');
+
+function tokenSummary(usage) {
+  const incomplete = usage.unreported_requests || usage.partial_requests;
+  return (incomplete ? '≥ ' : '') + tokenNumber(usage.total_tokens);
+}
+
+function tokenDetails(usage) {
+  const parts = ['输入 ' + tokenNumber(usage.input_tokens), '输出 ' + tokenNumber(usage.output_tokens), tokenNumber(usage.requests) + ' 次请求'];
+  if (usage.cached_tokens) parts.push('缓存 ' + tokenNumber(usage.cached_tokens));
+  if (usage.reasoning_tokens) parts.push('推理 ' + tokenNumber(usage.reasoning_tokens));
+  if (usage.unreported_requests) parts.push(tokenNumber(usage.unreported_requests) + ' 次未返回用量');
+  if (usage.partial_requests) parts.push(tokenNumber(usage.partial_requests) + ' 次仅返回部分用量');
+  return parts.join(' · ');
+}
+
+function renderUsageTotals(usage) {
+  if (!usage) return;
+  $('#usage-today').textContent = tokenSummary(usage.today);
+  $('#usage-total').textContent = tokenSummary(usage.total);
+  const breakdown = $('#usage-breakdown');
+  breakdown.replaceChildren(agentNode('p', '', '今日：' + tokenDetails(usage.today)), agentNode('p', '', '累计：' + tokenDetails(usage.total)));
+  for (const [model, counts] of Object.entries(usage.models || {})) {
+    breakdown.append(agentNode('p', 'usage-model', model + '：' + tokenSummary(counts) + ' token · ' + tokenDetails(counts)));
+  }
+  if (usage.sources?.lyrics?.requests) {
+    breakdown.append(agentNode('p', '', '其中歌词翻译：' + tokenSummary(usage.sources.lyrics) + ' token · ' + tokenDetails(usage.sources.lyrics)));
+  }
+  if (usage.since) breakdown.append(agentNode('p', 'usage-note', '开始记录：' + new Date(usage.since).toLocaleString('zh-CN')));
+  const warning = $('#usage-warning');
+  warning.textContent = usage.storage_error || (usage.total.unreported_requests || usage.total.partial_requests ? '部分请求没有完整用量，显示的是已报告的 token 合计。' : '');
+  warning.classList.toggle('hidden', !warning.textContent);
+}
+
+async function refreshUsage() {
+  try {
+    const response = await request('/api/usage');
+    renderUsageTotals(response.usage);
+  } catch (error) {
+    $('#usage-warning').textContent = '暂时无法读取用量：' + error.message;
+    $('#usage-warning').classList.remove('hidden');
+  }
+}
 
 function agentNode(tag, className, text) {
   const node = document.createElement(tag);
@@ -32,14 +75,20 @@ function newAgentTurn(prompt) {
   const status = agentNode('div', 'agent-task-status', '正在连接 AI…');
   const steps = agentNode('div', 'agent-steps');
   const answer = agentNode('div', 'agent-answer');
-  response.append(agentNode('span', 'agent-role', 'WALKMAN'), status, steps, answer);
+  const usage = agentNode('div', 'agent-turn-usage hidden');
+  response.append(agentNode('span', 'agent-role', 'WALKMAN'), status, steps, answer, usage);
   agentConversation.append(user, response);
   agentConversation.scrollTop = agentConversation.scrollHeight;
-  return { response, status, steps, answer, tools: new Map(), nextSeq: 0 };
+  return { response, status, steps, answer, usage, tools: new Map(), nextSeq: 0 };
 }
 
 function renderAgentJob(job, turn) {
   const shouldScroll = agentConversation.scrollHeight - agentConversation.scrollTop - agentConversation.clientHeight < 120;
+  if (job.usage && job.usage.requests) {
+    turn.usage.textContent = '本次 ' + tokenSummary(job.usage) + ' token · ' + tokenDetails(job.usage);
+    turn.usage.classList.remove('hidden');
+  }
+  renderUsageTotals(job.usage_totals);
   for (const event of job.events || []) {
     if (event.seq < turn.nextSeq) continue;
     turn.nextSeq = event.seq + 1;
@@ -150,6 +199,7 @@ agentForm.addEventListener('submit', async (event) => {
     setAgentBusy(false);
     $('span', agentSubmit).textContent = agentState.sessionId ? '继续执行' : '开始执行';
     agentInput.focus();
+    refreshUsage();
   }
 });
 
@@ -198,3 +248,6 @@ request('/api/ai/tools').then((response) => {
     $('#agent-tools').append(agentNode('span', 'agent-tool-chip', tool.label));
   }
 }).catch((error) => { $('#agent-tools').textContent = error.message; });
+
+refreshUsage();
+window.setInterval(() => { if (!document.hidden && !agentState.polling) refreshUsage(); }, 15000);
